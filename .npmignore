@@ -1,0 +1,19 @@
+# Source files (only publish compiled dist/)
+src/
+tsconfig.json
+
+# Development files
+*.test.ts
+*.spec.ts
+.vscode/
+.idea/
+
+# Build artifacts
+*.tsbuildinfo
+
+# Documentation (optional - remove if you want to include)
+# docs/
+
+# Git
+.git/
+.gitignore
