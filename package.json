@@ -25,7 +25,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": ""
+    "url": "https://github.com/designofadecade/cdk-constructs.git"
   },
   "peerDependencies": {
     "aws-cdk-lib": "^2.240.0",
