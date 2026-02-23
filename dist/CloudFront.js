@@ -293,7 +293,7 @@ export class CloudFront extends Construct {
      * @param props - Policy configuration
      * @returns Configured ResponseHeadersPolicy
      */
-    static ResponseHeaderPolicy(scope, name, props) {
+    static ResponseHeaderPolicy(scope, name, props = {}) {
         let contentSecurityPolicy = props.contentSecurityPolicy ??
             `default-src 'none'; script-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self'; form-action 'self'; base-uri 'self'; manifest-src 'self'; upgrade-insecure-requests`;
         contentSecurityPolicy += props.csp?.styleSrc ? `; style-src ${props.csp.styleSrc.join(' ')}` : "; style-src 'self'";
@@ -306,7 +306,7 @@ export class CloudFront extends Construct {
             .replaceAll(' none', " 'none'")
             .replaceAll(' unsafe-inline', " 'unsafe-inline'");
         return new ResponseHeadersPolicy(scope, name, {
-            responseHeadersPolicyName: props.name,
+            responseHeadersPolicyName: props.name ?? name,
             removeHeaders: ['Server', 'x-powered-by'],
             customHeadersBehavior: {
                 customHeaders: [

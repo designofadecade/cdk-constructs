@@ -109,7 +109,7 @@ export interface ResponseHeaderPolicyOptions {
     /**
      * Name for the policy
      */
-    readonly name: string;
+    readonly name?: string;
     /**
      * Optional custom CSP string
      */
@@ -273,7 +273,7 @@ export declare class CloudFront extends Construct {
      * @param props - Policy configuration
      * @returns Configured ResponseHeadersPolicy
      */
-    static ResponseHeaderPolicy(scope: Construct, name: string, props: ResponseHeaderPolicyOptions): IResponseHeadersPolicy;
+    static ResponseHeaderPolicy(scope: Construct, name: string, props?: ResponseHeaderPolicyOptions): IResponseHeadersPolicy;
     /**
      * Creates an HTTP origin from a domain name
      *
