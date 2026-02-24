@@ -1,0 +1,59 @@
+{
+  "name": "@designofadecade/cdk-constructs",
+  "version": "1.0.0",
+  "description": "TypeScript AWS CDK constructs library providing high-level abstractions for VPC, RDS, S3, CloudFront, Cognito authentication, Lambda functions, API Gateway, DynamoDB, SES, SQS, and more",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest run --coverage",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "aws",
+    "cdk",
+    "constructs",
+    "infrastructure",
+    "deployment"
+  ],
+  "author": "Design of a Decade <info@designofadecade.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/designofadecade/cdk-constructs.git"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=9.0.0"
+  },
+  "peerDependencies": {
+    "aws-cdk-lib": "^2.240.0",
+    "constructs": "^10.0.0"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.160",
+    "@types/node": "^25.3.0",
+    "@vitest/coverage-v8": "^4.0.18",
+    "@vitest/ui": "^4.0.18",
+    "aws-cdk-lib": "^2.240.0",
+    "constructs": "^10.3.0",
+    "typescript": "^5.3.3",
+    "vitest": "^4.0.18"
+  },
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@aws-sdk/client-secrets-manager": "^3.996.0",
+    "@aws-sdk/cloudfront-signer": "^3.993.0",
+    "aws-jwt-verify": "^5.1.1"
+  }
+}
