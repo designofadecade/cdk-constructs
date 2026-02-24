@@ -511,49 +511,47 @@ export class Cognito extends Construct {
      * Gets the entry path for the auth callback function
      */
     static CallbackAuthFunctionEntryPath(): string {
-        return (import.meta as any).resolve('@designofadecade/cdk-constructs/assets/functions/cognito-auth-callback/handler.js');
+        const __dirname = dirname(fileURLToPath(import.meta.url));
+        return resolve(__dirname, './assets/functions/cognito-auth-callback/handler.js');
     }
 
     /**
      * Gets the entry path for the sign-out callback function
      */
     static CallbackSignOutFunctionEntryPath(): string {
-        return (import.meta as any).resolve(
-            '@designofadecade/cdk-constructs/assets/functions/cognito-signout-callback/handler.js',
-        );
+        const __dirname = dirname(fileURLToPath(import.meta.url));
+        return resolve(__dirname, './assets/functions/cognito-signout-callback/handler.js');
     }
 
     /**
      * Gets the entry path for the HTTP API authorization function
      */
     static HttpApiAuthorizationFunctionEntryPath(): string {
-        return (import.meta as any).resolve(
-            '@designofadecade/cdk-constructs/assets/functions/cognito-auth-http-api-authorization/handler.js',
-        );
+        const __dirname = dirname(fileURLToPath(import.meta.url));
+        return resolve(__dirname, './assets/functions/cognito-auth-http-api-authorization/handler.js');
     }
 
     /**
      * Gets the entry path for the pre-token generation function
      */
     static PreTokenGenerationFunctionEntryPath(): string {
-        return (import.meta as any).resolve(
-            '@designofadecade/cdk-constructs/assets/functions/cognito-pre-token-generation/handler.js',
-        );
+        const __dirname = dirname(fileURLToPath(import.meta.url));
+        return resolve(__dirname, './assets/functions/cognito-pre-token-generation/handler.js');
     }
 
     /**
      * Gets the entry path for the custom message function
      */
     static CustomMessageFunctionEntryPath(): string {
-        return (import.meta as any).resolve('@designofadecade/cdk-constructs/assets/functions/cognito-custom-message/handler.js');
+        const __dirname = dirname(fileURLToPath(import.meta.url));
+        return resolve(__dirname, './assets/functions/cognito-custom-message/handler.js');
     }
 
     /**
      * Gets the entry path for the token refresh function
      */
     static TokenRefreshFunctionEntryPath(): string {
-        return (import.meta as any).resolve(
-            '@designofadecade/cdk-constructs/assets/functions/cognito-auth-token-refresh/handler.js',
-        );
+        const __dirname = dirname(fileURLToPath(import.meta.url));
+        return resolve(__dirname, './assets/functions/cognito-auth-token-refresh/handler.js');
     }
 }
