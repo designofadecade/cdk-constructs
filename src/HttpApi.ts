@@ -88,6 +88,10 @@ export class HttpApi extends Construct {
 
         this.#httpApi = new AwsHttpApi(this, 'HttpApi', {
             apiName: props.name ?? props.stack.id,
+            corsPreflight: {
+                allowMethods: [HttpMethod.GET, HttpMethod.POST, HttpMethod.PUT, HttpMethod.DELETE, HttpMethod.OPTIONS],
+                allowOrigins: ['*'],
+            },
         });
 
         props.stack.tags.forEach(({ key, value }) => {
@@ -106,6 +110,27 @@ export class HttpApi extends Construct {
      */
     get domainName(): string {
         return Fn.select(2, Fn.split('/', this.#httpApi.url ?? ''));
+    }
+
+    /**
+     * Gets the HTTP API instance
+     */
+    get api(): AwsHttpApi {
+        return this.#httpApi;
+    }
+
+    /**
+     * Gets the API ID
+     */
+    get apiId(): string {
+        return this.#httpApi.apiId;
+    }
+
+    /**
+     * Gets the API endpoint URL
+     */
+    get apiEndpoint(): string {
+        return this.#httpApi.url ?? '';
     }
 
     /**

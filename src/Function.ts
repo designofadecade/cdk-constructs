@@ -112,6 +112,11 @@ export interface FunctionProps {
      * Optional Function URL configuration
      */
     readonly url?: FunctionUrlConfig;
+
+    /**
+     * Optional Function URL configuration (alias for url)
+     */
+    readonly functionUrl?: FunctionUrlConfig;
 }
 
 /**
@@ -193,7 +198,7 @@ export class Function extends Construct {
                     : this.#securityGroup
                         ? [this.#securityGroup]
                         : undefined,
-                runtime: Runtime.NODEJS_24_X,
+                runtime: Runtime.NODEJS_20_X,
                 handler: 'index.handler',
                 code: props.code,
                 architecture: Architecture.ARM_64,
@@ -261,7 +266,7 @@ export class Function extends Construct {
                     : this.#securityGroup
                         ? [this.#securityGroup]
                         : undefined,
-                runtime: Runtime.NODEJS_24_X,
+                runtime: Runtime.NODEJS_20_X,
                 entry: entryPath,
                 architecture: Architecture.ARM_64,
                 memorySize: props.memorySize ?? 512,
@@ -271,9 +276,10 @@ export class Function extends Construct {
             });
         }
 
-        if (props.url) {
+        const urlConfig = props.functionUrl ?? props.url;
+        if (urlConfig) {
             this.#fcnUrl = this.#fn.addFunctionUrl({
-                authType: props.url.authType === 'AWS_IAM' ? FunctionUrlAuthType.AWS_IAM : FunctionUrlAuthType.NONE,
+                authType: urlConfig.authType === 'AWS_IAM' ? FunctionUrlAuthType.AWS_IAM : FunctionUrlAuthType.NONE,
             });
 
             new CfnOutput(this, 'FunctionUrl', {
@@ -293,6 +299,20 @@ export class Function extends Construct {
      */
     get name(): string {
         return this.#name;
+    }
+
+    /**
+     * Gets the Lambda function name
+     */
+    get functionName(): string {
+        return this.#name;
+    }
+
+    /**
+     * Gets the Lambda function ARN
+     */
+    get functionArn(): string {
+        return this.#fn.functionArn;
     }
 
     /**

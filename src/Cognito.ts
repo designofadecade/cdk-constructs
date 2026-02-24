@@ -273,6 +273,7 @@ export class Cognito extends Construct {
     #userPoolDomain: UserPoolDomain;
     #domainName: string;
     #userPoolClients = new Map<string, UserPoolClient>();
+    #defaultUserPoolClient?: UserPoolClient;
 
     constructor(scope: Construct, id: string, props: CognitoProps) {
         super(scope, id);
@@ -288,7 +289,7 @@ export class Cognito extends Construct {
             },
             ...(props.mfa != null
                 ? {
-                    mfa: (typeof props.mfa === 'boolean' ? props.mfa : props.mfa.required) ? Mfa.REQUIRED : Mfa.OPTIONAL,
+                    mfa: Mfa.OPTIONAL,
                     mfaSecondFactor:
                         props.mfaSecondFactor ??
                         (typeof props.mfa === 'object' ? props.mfa.mfaSecondFactor : undefined) ?? {
@@ -317,15 +318,41 @@ export class Cognito extends Construct {
 
         this.#userPoolDomain = this.#userPool.addDomain('UserPoolDomain', {
             managedLoginVersion: ManagedLoginVersion.NEWER_MANAGED_LOGIN,
-            customDomain: props.customDomain
+            ...(props.customDomain
                 ? {
-                    domainName: props.customDomain.domain,
-                    certificate: props.customDomain.certificate,
+                    customDomain: {
+                        domainName: props.customDomain.domain,
+                        certificate: props.customDomain.certificate,
+                    },
                 }
-                : undefined,
+                : {
+                    cognitoDomain: {
+                        domainPrefix: `${props.stack.id}-${props.stack.label.toLowerCase().replace(/[^a-z0-9-]/g, '-')}`,
+                    },
+                }),
         });
 
         this.#domainName = `${this.#userPoolDomain.domainName}.auth.ca-central-1.amazoncognito.com`;
+
+        // Create default client if no clients specified
+        if (!props.clients || props.clients.length === 0) {
+            this.#defaultUserPoolClient = this.#userPool.addClient('UserPoolClient', {
+                userPoolClientName: `${props.stack.label} Client`,
+                authFlows: {
+                    adminUserPassword: true,
+                    userPassword: true,
+                    userSrp: true,
+                },
+                readAttributes: props.readAttributes,
+                writeAttributes: props.writeAttributes,
+            });
+
+            new CfnOutput(this, 'CognitoUserPoolClientID', {
+                value: this.#defaultUserPoolClient.userPoolClientId,
+                description: 'Cognito User Pool Client ID',
+                exportName: `${props.stack.id}-cognito-user-pool-client-id`,
+            });
+        }
 
         if (props.clients) {
             props.clients.forEach(({ id, name, callbackUrls, logoutUrls, branding }) => {
@@ -410,6 +437,27 @@ export class Cognito extends Construct {
      */
     get userPool(): IUserPool {
         return this.#userPool;
+    }
+
+    /**
+     * Gets the User Pool ID
+     */
+    get userPoolId(): string {
+        return this.#userPool.userPoolId;
+    }
+
+    /**
+     * Gets the default User Pool Client
+     */
+    get userPoolClient(): UserPoolClient | undefined {
+        return this.#defaultUserPoolClient;
+    }
+
+    /**
+     * Gets the default User Pool Client ID
+     */
+    get userPoolClientId(): string | undefined {
+        return this.#defaultUserPoolClient?.userPoolClientId;
     }
 
     /**

@@ -1,5 +1,5 @@
 import { Construct } from 'constructs';
-import { Tags, SecretValue } from 'aws-cdk-lib';
+import { Tags, SecretValue, CfnOutput } from 'aws-cdk-lib';
 import { Secret, type ISecret, type SecretStringGenerator } from 'aws-cdk-lib/aws-secretsmanager';
 import type { IGrantable } from 'aws-cdk-lib/aws-iam';
 
@@ -79,7 +79,7 @@ export class Secrets extends Construct {
      * A placeholder SecretValue that should be replaced manually in the AWS Console
      * Use this for secrets that should not be stored in code
      */
-    static readonly REPLACE_ME = SecretValue.unsafePlainText('REPLACE_ME');
+    static readonly REPLACE_ME = '__REPLACE_ME__';
 
     #secret: ISecret;
 
@@ -108,6 +108,12 @@ export class Secrets extends Construct {
         props.stack.tags.forEach(({ key, value }) => {
             Tags.of(this.#secret).add(key, value);
         });
+
+        new CfnOutput(this, 'SecretArn', {
+            value: this.#secret.secretArn,
+            description: 'Secret ARN',
+            exportName: `${secretName}-arn`,
+        });
     }
 
     /**
@@ -133,5 +139,61 @@ export class Secrets extends Construct {
      */
     grantRead(principal: IGrantable): void {
         this.#secret.grantRead(principal);
+    }
+
+    /**
+     * Creates a JSON secret with simplified props
+     * 
+     * @param scope - The construct scope
+     * @param id - Unique identifier
+     * @param props - Simplified props without secretNamePrefix requirement
+     * @returns A new Secrets instance
+     */
+    static json(
+        scope: Construct,
+        id: string,
+        props: Omit<SecretsProps, 'stack'> & { stack: { id: string; tags: ReadonlyArray<{ key: string; value: string }> } }
+    ): Secrets {
+        return new Secrets(scope, id, {
+            ...props,
+            stack: {
+                config: { secretNamePrefix: '' },
+                tags: props.stack.tags,
+            },
+        });
+    }
+
+    /**
+     * Creates a string secret with simplified props
+     * 
+     * @param scope - The construct scope
+     * @param id - Unique identifier
+     * @param props - Simplified props without secretNamePrefix requirement
+     * @returns A new Secrets instance
+     */
+    static string(
+        scope: Construct,
+        id: string,
+        props: Omit<SecretsProps, 'stack'> & { stack: { id: string; tags: ReadonlyArray<{ key: string; value: string }> } }
+    ): Secrets {
+        return new Secrets(scope, id, {
+            ...props,
+            stack: {
+                config: { secretNamePrefix: '' },
+                tags: props.stack.tags,
+            },
+        });
+    }
+
+    /**
+     * Imports an existing secret by name
+     * 
+     * @param scope - The construct scope
+     * @param id - Unique identifier
+     * @param secretName - The name of the existing secret
+     * @returns An ISecret that can be used to reference the secret
+     */
+    static fromExistingSecret(scope: Construct, id: string, secretName: string): ISecret {
+        return Secret.fromSecretNameV2(scope, id, secretName);
     }
 }

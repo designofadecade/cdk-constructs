@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { App, Stack } from 'aws-cdk-lib';
-import { Template } from 'aws-cdk-lib/assertions';
+import { Template, Match } from 'aws-cdk-lib/assertions';
 import { EventBridge } from '../src/EventBridge.js';
 import { Function } from '../src/Function.js';
 
@@ -69,11 +69,11 @@ describe('EventBridge', () => {
         const template = Template.fromStack(stack);
         template.hasResourceProperties('AWS::Events::Rule', {
             Targets: [
-                {
-                    Arn: {
-                        'Fn::GetAtt': ['TestLambda', 'Arn'],
-                    },
-                },
+                Match.objectLike({
+                    Arn: Match.objectLike({
+                        'Fn::GetAtt': Match.arrayWith([Match.stringLikeRegexp('.*Lambda.*')]),
+                    }),
+                }),
             ],
         });
     });

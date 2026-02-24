@@ -27,12 +27,13 @@ describe('Vpc', () => {
 
         new Vpc(stack, 'TestVpc', {
             name: 'test-vpc',
+            maxAzs: 2,
             stack: { id: 'test', tags: [] },
         });
 
         const template = Template.fromStack(stack);
-        // Public, Private, Isolated subnets = 9 subnets (3 AZs x 3 types)
-        template.resourceCountIs('AWS::EC2::Subnet', 9);
+        // Public, Private, Isolated subnets = 6 subnets (2 AZs x 3 types)
+        template.resourceCountIs('AWS::EC2::Subnet', 6);
     });
 
     it('creates NAT gateways when enabled', () => {
@@ -41,12 +42,13 @@ describe('Vpc', () => {
 
         new Vpc(stack, 'TestVpc', {
             name: 'test-vpc',
-            natGateways: true,
+            maxAzs: 2,
+            natGateways: 2,
             stack: { id: 'test', tags: [] },
         });
 
         const template = Template.fromStack(stack);
-        template.resourceCountIs('AWS::EC2::NatGateway', 3);
+        template.resourceCountIs('AWS::EC2::NatGateway', 2);
     });
 
     it('does not create NAT gateways when disabled', () => {
@@ -55,7 +57,7 @@ describe('Vpc', () => {
 
         new Vpc(stack, 'TestVpc', {
             name: 'test-vpc',
-            natGateways: false,
+            natGateways: 0,
             stack: { id: 'test', tags: [] },
         });
 
@@ -69,7 +71,8 @@ describe('Vpc', () => {
 
         new Vpc(stack, 'TestVpc', {
             name: 'test-vpc',
-            vpcEndpoints: ['sqs', 's3', 'secretsmanager'],
+            maxAzs: 2,
+            endpoints: ['sqs', 's3', 'secrets-manager'],
             stack: { id: 'test', tags: [] },
         });
 

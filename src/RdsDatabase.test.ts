@@ -1,18 +1,21 @@
 import { describe, it, expect } from 'vitest';
 import { App, Stack } from 'aws-cdk-lib';
 import { Template, Match } from 'aws-cdk-lib/assertions';
-import { Vpc } from 'aws-cdk-lib/aws-ec2';
+import { Vpc } from './Vpc.js';
 import { RdsDatabase } from './RdsDatabase.js';
 
 describe('RdsDatabase', () => {
     it('creates Aurora database cluster', () => {
         const app = new App();
         const stack = new Stack(app, 'TestStack');
-        const vpc = new Vpc(stack, 'TestVpc');
+        const vpc = new Vpc(stack, 'TestVpc', {
+            name: 'test-vpc',
+            stack: { id: 'test', tags: [] },
+        });
 
         new RdsDatabase(stack, 'TestDatabase', {
             name: 'test-db',
-            vpc,
+            vpc: vpc.vpc,
             stack: { id: 'test', tags: [] },
         });
 
@@ -23,11 +26,14 @@ describe('RdsDatabase', () => {
     it('enables storage encryption', () => {
         const app = new App();
         const stack = new Stack(app, 'TestStack');
-        const vpc = new Vpc(stack, 'TestVpc');
+        const vpc = new Vpc(stack, 'TestVpc', {
+            name: 'test-vpc',
+            stack: { id: 'test', tags: [] },
+        });
 
         new RdsDatabase(stack, 'TestDatabase', {
             name: 'test-db',
-            vpc,
+            vpc: vpc.vpc,
             stack: { id: 'test', tags: [] },
         });
 
@@ -40,26 +46,32 @@ describe('RdsDatabase', () => {
     it('creates security group', () => {
         const app = new App();
         const stack = new Stack(app, 'TestStack');
-        const vpc = new Vpc(stack, 'TestVpc');
+        const vpc = new Vpc(stack, 'TestVpc', {
+            name: 'test-vpc',
+            stack: { id: 'test', tags: [] },
+        });
 
         new RdsDatabase(stack, 'TestDatabase', {
             name: 'test-db',
-            vpc,
+            vpc: vpc.vpc,
             stack: { id: 'test', tags: [] },
         });
 
         const template = Template.fromStack(stack);
-        template.resourceCountIs('AWS::EC2::SecurityGroup', 2); // VPC default + RDS
+        template.resourceCountIs('AWS::EC2::SecurityGroup', 1); // RDS security group
     });
 
     it('generates credentials in Secrets Manager', () => {
         const app = new App();
         const stack = new Stack(app, 'TestStack');
-        const vpc = new Vpc(stack, 'TestVpc');
+        const vpc = new Vpc(stack, 'TestVpc', {
+            name: 'test-vpc',
+            stack: { id: 'test', tags: [] },
+        });
 
         new RdsDatabase(stack, 'TestDatabase', {
             name: 'test-db',
-            vpc,
+            vpc: vpc.vpc,
             stack: { id: 'test', tags: [] },
         });
 
@@ -70,11 +82,14 @@ describe('RdsDatabase', () => {
     it('enables deletion protection', () => {
         const app = new App();
         const stack = new Stack(app, 'TestStack');
-        const vpc = new Vpc(stack, 'TestVpc');
+        const vpc = new Vpc(stack, 'TestVpc', {
+            name: 'test-vpc',
+            stack: { id: 'test', tags: [] },
+        });
 
         new RdsDatabase(stack, 'TestDatabase', {
             name: 'test-db',
-            vpc,
+            vpc: vpc.vpc,
             stack: { id: 'test', tags: [] },
         });
 
@@ -87,11 +102,14 @@ describe('RdsDatabase', () => {
     it('creates reader instances when specified', () => {
         const app = new App();
         const stack = new Stack(app, 'TestStack');
-        const vpc = new Vpc(stack, 'TestVpc');
+        const vpc = new Vpc(stack, 'TestVpc', {
+            name: 'test-vpc',
+            stack: { id: 'test', tags: [] },
+        });
 
         new RdsDatabase(stack, 'TestDatabase', {
             name: 'test-db',
-            vpc,
+            vpc: vpc.vpc,
             readers: 2,
             stack: { id: 'test', tags: [] },
         });
@@ -104,11 +122,14 @@ describe('RdsDatabase', () => {
     it('exposes cluster and security group', () => {
         const app = new App();
         const stack = new Stack(app, 'TestStack');
-        const vpc = new Vpc(stack, 'TestVpc');
+        const vpc = new Vpc(stack, 'TestVpc', {
+            name: 'test-vpc',
+            stack: { id: 'test', tags: [] },
+        });
 
         const database = new RdsDatabase(stack, 'TestDatabase', {
             name: 'test-db',
-            vpc,
+            vpc: vpc.vpc,
             stack: { id: 'test', tags: [] },
         });
 

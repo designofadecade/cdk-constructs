@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { App, Stack } from 'aws-cdk-lib';
-import { Template } from 'aws-cdk-lib/assertions';
+import { Template, Match } from 'aws-cdk-lib/assertions';
 import { Vpc } from 'aws-cdk-lib/aws-ec2';
 import { Function } from '../src/Function.js';
 
@@ -49,10 +49,10 @@ describe('Function', () => {
 
         const template = Template.fromStack(stack);
         template.hasResourceProperties('AWS::Lambda::Function', {
-            VpcConfig: {
-                SubnetIds: expect.any(Array),
-                SecurityGroupIds: expect.any(Array),
-            },
+            VpcConfig: Match.objectLike({
+                SubnetIds: Match.anyValue(),
+                SecurityGroupIds: Match.anyValue(),
+            }),
         });
     });
 

@@ -68,7 +68,7 @@ export class Sqs extends Construct {
             encryption: QueueEncryption.SQS_MANAGED,
             enforceSSL: true,
             deadLetterQueue: {
-                maxReceiveCount: 5,
+                maxReceiveCount: 3,
                 queue: this.#deadLetterQueue,
             },
         });

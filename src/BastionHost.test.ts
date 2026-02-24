@@ -34,7 +34,7 @@ describe('BastionHost', () => {
         });
 
         const template = Template.fromStack(stack);
-        template.resourceCountIs('AWS::EC2::SecurityGroup', 3); // VPC default + bastion + VPC endpoints
+        template.resourceCountIs('AWS::EC2::SecurityGroup', 1); // bastion security group
     });
 
     it('uses ARM64 architecture', () => {

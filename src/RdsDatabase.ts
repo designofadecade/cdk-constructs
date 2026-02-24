@@ -202,6 +202,13 @@ export class RdsDatabase extends Construct {
     }
 
     /**
+     * Gets the RDS database cluster
+     */
+    get cluster(): IDatabaseCluster {
+        return this.#rds;
+    }
+
+    /**
      * Gets the ARN of the secret containing database credentials
      */
     get secretArn(): string {

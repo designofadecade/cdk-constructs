@@ -267,6 +267,7 @@ export interface CloudFrontProps {
  */
 export class CloudFront extends Construct {
     #distribution: Distribution;
+    #responseHeadersPolicy?: IResponseHeadersPolicy;
     #functionUrlOriginAccessControl?: FunctionUrlOriginAccessControl;
     #functionIndexRewrite?: CfFunction;
     #functionSpaRewrite?: CfFunction;
@@ -274,17 +275,20 @@ export class CloudFront extends Construct {
     constructor(scope: Construct, id: string, props: CloudFrontProps) {
         super(scope, id);
 
+        this.#responseHeadersPolicy = props.defaultBehavior.responseHeadersPolicy ?? CloudFront.ResponseHeaderPolicy(this, 'ResponseHeadersPolicy');
+
         this.#distribution = new Distribution(this, 'Distribution', {
             domainNames: props.domain?.names ? [...props.domain.names] : undefined,
             certificate: props.domain?.certificate,
             comment: props.name ?? props.stack.id,
             priceClass: PriceClass.PRICE_CLASS_100,
             defaultRootObject: 'index.html',
+            httpVersion: 'http2and3' as any,
             defaultBehavior: {
                 origin: props.defaultBehavior.origin,
                 cachePolicy: props.cachingDisabled === true ? CachePolicy.CACHING_DISABLED : CachePolicy.CACHING_OPTIMIZED,
                 viewerProtocolPolicy: ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
-                responseHeadersPolicy: props.defaultBehavior.responseHeadersPolicy,
+                responseHeadersPolicy: this.#responseHeadersPolicy,
                 trustedKeyGroups: props.trustedKeyGroups ? [...props.trustedKeyGroups] : undefined,
             },
             errorResponses: props.errorResponses ? [...props.errorResponses] : [],
@@ -322,6 +326,34 @@ export class CloudFront extends Construct {
      */
     get domainName(): string {
         return this.#distribution.distributionDomainName;
+    }
+
+    /**
+     * Gets the CloudFront distribution instance
+     */
+    get distribution(): IDistribution {
+        return this.#distribution;
+    }
+
+    /**
+     * Gets the CloudFront distribution ID
+     */
+    get distributionId(): string {
+        return this.#distribution.distributionId;
+    }
+
+    /**
+     * Gets the CloudFront distribution domain name
+     */
+    get distributionDomainName(): string {
+        return this.#distribution.distributionDomainName;
+    }
+
+    /**
+     * Gets the response headers policy
+     */
+    get responseHeadersPolicy(): IResponseHeadersPolicy | undefined {
+        return this.#responseHeadersPolicy;
     }
 
     /**

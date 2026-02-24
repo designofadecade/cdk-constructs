@@ -1,6 +1,6 @@
 import { Construct } from 'constructs';
 import { RemovalPolicy, Duration, Tags, CfnOutput } from 'aws-cdk-lib';
-import { Bucket, BlockPublicAccess, type IBucket } from 'aws-cdk-lib/aws-s3';
+import { Bucket, BlockPublicAccess, BucketEncryption, type IBucket } from 'aws-cdk-lib/aws-s3';
 import type { IGrantable } from 'aws-cdk-lib/aws-iam';
 
 /**
@@ -56,6 +56,7 @@ export class S3Bucket extends Construct {
             removalPolicy: RemovalPolicy.RETAIN,
             blockPublicAccess: BlockPublicAccess.BLOCK_ALL,
             publicReadAccess: false,
+            encryption: BucketEncryption.S3_MANAGED,
         });
 
         props.stack.tags.forEach(({ key, value }) => {
@@ -74,6 +75,13 @@ export class S3Bucket extends Construct {
      */
     get bucket(): IBucket {
         return this.#bucket;
+    }
+
+    /**
+     * Gets the bucket name
+     */
+    get bucketName(): string {
+        return this.#bucket.bucketName;
     }
 
     /**

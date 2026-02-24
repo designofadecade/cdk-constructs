@@ -81,6 +81,13 @@ export class Ses extends Construct {
     }
 
     /**
+     * Gets the configuration set name
+     */
+    get configurationSetName(): string {
+        return this.#configurationSetName;
+    }
+
+    /**
      * Creates an IAM policy statement for sending emails via SES
      * 
      * This grants permissions to:
