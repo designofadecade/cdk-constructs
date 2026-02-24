@@ -5,6 +5,7 @@ import { HttpOrigin } from 'aws-cdk-lib/aws-cloudfront-origins';
 import { type IHostedZone } from 'aws-cdk-lib/aws-route53';
 import type { IBucket } from 'aws-cdk-lib/aws-s3';
 import type { Function as LambdaFunction } from './Function.js';
+import type { Waf } from './Waf.js';
 /**
  * Domain configuration for CloudFront distribution
  */
@@ -170,6 +171,12 @@ export interface CloudFrontProps {
      * Optional custom error responses
      */
     readonly errorResponses?: ReadonlyArray<ErrorResponse>;
+    /**
+     * Optional WAF Web ACL to associate with the distribution
+     * Can be a Waf construct or a WAF Web ACL ARN string
+     * Note: WAF for CloudFront must be created in us-east-1
+     */
+    readonly waf?: Waf | string;
 }
 /**
  * A CDK construct for creating CloudFront distributions with common configurations
@@ -180,10 +187,18 @@ export interface CloudFrontProps {
  * - Response header policies with CSP
  * - Signed URLs/cookies support
  * - Built-in CloudFront Functions for SPA and index rewriting
+ * - WAF integration for security
  * - Automatic tagging
  *
  * @example
  * ```typescript
+ * // Create WAF (must be in us-east-1 for CloudFront)
+ * const waf = new Waf(this, 'WAF', {
+ *   enableManagedRules: true,
+ *   stack: { id: 'my-app', tags: [] },
+ * });
+ *
+ * // Create CloudFront with WAF
  * const cdn = new CloudFront(this, 'CDN', {
  *   name: 'my-app',
  *   domain: {
@@ -200,6 +215,7 @@ export interface CloudFrontProps {
  *       name: 'my-policy',
  *     }),
  *   },
+ *   waf, // Pass WAF construct directly
  *   stack: { id: 'my-app', tags: [] },
  * });
  *

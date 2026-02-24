@@ -14,10 +14,18 @@ import { ServicePrincipal } from 'aws-cdk-lib/aws-iam';
  * - Response header policies with CSP
  * - Signed URLs/cookies support
  * - Built-in CloudFront Functions for SPA and index rewriting
+ * - WAF integration for security
  * - Automatic tagging
  *
  * @example
  * ```typescript
+ * // Create WAF (must be in us-east-1 for CloudFront)
+ * const waf = new Waf(this, 'WAF', {
+ *   enableManagedRules: true,
+ *   stack: { id: 'my-app', tags: [] },
+ * });
+ *
+ * // Create CloudFront with WAF
  * const cdn = new CloudFront(this, 'CDN', {
  *   name: 'my-app',
  *   domain: {
@@ -34,6 +42,7 @@ import { ServicePrincipal } from 'aws-cdk-lib/aws-iam';
  *       name: 'my-policy',
  *     }),
  *   },
+ *   waf, // Pass WAF construct directly
  *   stack: { id: 'my-app', tags: [] },
  * });
  *
@@ -55,6 +64,8 @@ export class CloudFront extends Construct {
     constructor(scope, id, props) {
         super(scope, id);
         this.#responseHeadersPolicy = props.defaultBehavior.responseHeadersPolicy ?? CloudFront.ResponseHeaderPolicy(this, 'ResponseHeadersPolicy');
+        // Extract WAF ARN if Waf construct is provided
+        const webAclId = typeof props.waf === 'string' ? props.waf : props.waf?.webAclArn;
         this.#distribution = new Distribution(this, 'Distribution', {
             domainNames: props.domain?.names ? [...props.domain.names] : undefined,
             certificate: props.domain?.certificate,
@@ -62,6 +73,7 @@ export class CloudFront extends Construct {
             priceClass: PriceClass.PRICE_CLASS_100,
             defaultRootObject: 'index.html',
             httpVersion: 'http2and3',
+            webAclId,
             defaultBehavior: {
                 origin: props.defaultBehavior.origin,
                 cachePolicy: props.cachingDisabled === true ? CachePolicy.CACHING_DISABLED : CachePolicy.CACHING_OPTIMIZED,

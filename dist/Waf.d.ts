@@ -1,6 +1,5 @@
 import { Construct } from 'constructs';
 import { CfnWebACL, type CfnWebACL as ICfnWebACL } from 'aws-cdk-lib/aws-wafv2';
-import type { IDistribution } from 'aws-cdk-lib/aws-cloudfront';
 /**
  * AWS Managed Rule configuration
  */
@@ -98,8 +97,9 @@ export interface WafProps {
     /**
      * Scope of the Web ACL ('CLOUDFRONT' or 'REGIONAL')
      * Note: CLOUDFRONT scope must be deployed in us-east-1
+     * If not provided, automatically determined from stack region
      */
-    readonly scope: 'CLOUDFRONT' | 'REGIONAL';
+    readonly scope?: 'CLOUDFRONT' | 'REGIONAL';
     /**
      * Default action for requests that don't match any rules
      */
@@ -124,10 +124,6 @@ export interface WafProps {
      * Geographic blocking configuration
      */
     readonly geoBlock?: GeoBlockConfig;
-    /**
-     * Optional CloudFront distribution to associate with
-     */
-    readonly distribution?: IDistribution;
 }
 /**
  * A CDK construct for creating AWS WAF Web ACLs with best practice security rules
@@ -139,12 +135,13 @@ export interface WafProps {
  * - Geographic blocking
  * - CloudFront association
  * - Automatic tagging
+ * - Static scope constants (Waf.SCOPE_CLOUDFRONT, Waf.SCOPE_REGIONAL)
  *
  * @example
  * ```typescript
+ * // Auto-detect scope from region
  * const waf = new Waf(this, 'WAF', {
  *   name: 'my-app-waf',
- *   scope: 'CLOUDFRONT',
  *   enableManagedRules: true,
  *   rateLimit: {
  *     limit: 2000,
@@ -157,10 +154,19 @@ export interface WafProps {
  *   distribution: myCloudFrontDistribution,
  *   stack: { id: 'my-app', tags: [] },
  * });
+ *
+ * // Or use explicit scope with static constants
+ * const regionalWaf = new Waf(this, 'RegionalWAF', {
+ *   scope: Waf.SCOPE_REGIONAL,
+ *   enableManagedRules: true,
+ *   stack: { id: 'my-app', tags: [] },
+ * });
  * ```
  */
 export declare class Waf extends Construct {
     #private;
+    static readonly SCOPE_CLOUDFRONT: 'CLOUDFRONT';
+    static readonly SCOPE_REGIONAL: 'REGIONAL';
     constructor(scope: Construct, id: string, props: WafProps);
     /**
      * Gets the Web ACL ID
@@ -179,12 +185,31 @@ export declare class Waf extends Construct {
      */
     get webAcl(): CfnWebACL;
     /**
-     * Associates the Web ACL with a resource
+     * Associates the Web ACL with a regional resource (ALB, API Gateway, etc.)
+     *
+     * Note: For CloudFront distributions, use the webAclId property on the distribution instead.
+     * CloudFront distributions require the WAF ARN to be set during creation, not via association.
      *
      * @param id - Unique identifier for the association
-     * @param resourceArn - ARN of the resource to associate with
+     * @param resourceArn - ARN of the regional resource (ALB, API Gateway, AppSync, Cognito User Pool)
+     *
+     * @example
+     * ```typescript
+     * // For ALB
+     * waf.associateWithResource('ALB', loadBalancer.loadBalancerArn);
+     *
+     * // For API Gateway
+     * waf.associateWithResource('API', apiGateway.apiArn);
+     * ```
      */
     associateWithResource(id: string, resourceArn: string): void;
+    /**
+     * Determines the WAF scope based on the AWS region
+     *
+     * @param region - AWS region (e.g., 'us-east-1', 'eu-west-1')
+     * @returns 'CLOUDFRONT' if us-east-1, otherwise 'REGIONAL'
+     */
+    static GetScopeFromRegion(region: string): 'CLOUDFRONT' | 'REGIONAL';
     /**
      * Gets the default AWS Managed Rules for best practices
      *

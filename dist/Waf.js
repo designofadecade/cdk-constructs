@@ -11,12 +11,13 @@ import { CfnWebACL, CfnWebACLAssociation, CfnIPSet, } from 'aws-cdk-lib/aws-wafv
  * - Geographic blocking
  * - CloudFront association
  * - Automatic tagging
+ * - Static scope constants (Waf.SCOPE_CLOUDFRONT, Waf.SCOPE_REGIONAL)
  *
  * @example
  * ```typescript
+ * // Auto-detect scope from region
  * const waf = new Waf(this, 'WAF', {
  *   name: 'my-app-waf',
- *   scope: 'CLOUDFRONT',
  *   enableManagedRules: true,
  *   rateLimit: {
  *     limit: 2000,
@@ -29,18 +30,28 @@ import { CfnWebACL, CfnWebACLAssociation, CfnIPSet, } from 'aws-cdk-lib/aws-wafv
  *   distribution: myCloudFrontDistribution,
  *   stack: { id: 'my-app', tags: [] },
  * });
+ *
+ * // Or use explicit scope with static constants
+ * const regionalWaf = new Waf(this, 'RegionalWAF', {
+ *   scope: Waf.SCOPE_REGIONAL,
+ *   enableManagedRules: true,
+ *   stack: { id: 'my-app', tags: [] },
+ * });
  * ```
  */
 export class Waf extends Construct {
+    static SCOPE_CLOUDFRONT = 'CLOUDFRONT';
+    static SCOPE_REGIONAL = 'REGIONAL';
     #webAcl;
     #scope;
     constructor(scope, id, props) {
         super(scope, id);
-        this.#scope = props.scope;
+        const stackRegion = Stack.of(this).region;
+        // Auto-detect scope from region if not provided
+        this.#scope = props.scope ?? Waf.GetScopeFromRegion(stackRegion);
         // Validate CloudFront scope is in us-east-1
-        if (props.scope === 'CLOUDFRONT') {
-            const region = Stack.of(this).region;
-            if (region !== 'us-east-1' && !region.startsWith('${')) {
+        if (this.#scope === 'CLOUDFRONT') {
+            if (stackRegion !== 'us-east-1' && !stackRegion.startsWith('${')) {
                 throw new Error('WAF Web ACL with CLOUDFRONT scope must be created in us-east-1 region');
             }
         }
@@ -90,7 +101,7 @@ export class Waf extends Construct {
         if (props.ipSets) {
             props.ipSets.forEach((ipSetConfig) => {
                 const ipSet = new CfnIPSet(this, `IPSet${ipSetConfig.name}`, {
-                    scope: props.scope,
+                    scope: this.#scope,
                     name: ipSetConfig.name,
                     addresses: [...ipSetConfig.addresses],
                     ipAddressVersion: ipSetConfig.ipAddressVersion ?? 'IPV4',
@@ -145,7 +156,7 @@ export class Waf extends Construct {
         // Create Web ACL
         this.#webAcl = new CfnWebACL(this, 'WebACL', {
             name: props.name ?? `${props.stack.id}-waf`,
-            scope: props.scope,
+            scope: this.#scope,
             defaultAction: props.defaultAction === 'BLOCK' ? { block: {} } : { allow: {} },
             rules,
             visibilityConfig: {
@@ -154,13 +165,6 @@ export class Waf extends Construct {
                 metricName: `${props.stack.id}-waf`,
             },
         });
-        // Associate with CloudFront distribution if provided
-        if (props.distribution) {
-            new CfnWebACLAssociation(this, 'WebACLAssociation', {
-                resourceArn: props.distribution.distributionArn,
-                webAclArn: this.#webAcl.attrArn,
-            });
-        }
         // Apply tags
         props.stack.tags.forEach(({ key, value }) => {
             Tags.of(this.#webAcl).add(key, value);
@@ -202,16 +206,45 @@ export class Waf extends Construct {
         return this.#webAcl;
     }
     /**
-     * Associates the Web ACL with a resource
+     * Associates the Web ACL with a regional resource (ALB, API Gateway, etc.)
+     *
+     * Note: For CloudFront distributions, use the webAclId property on the distribution instead.
+     * CloudFront distributions require the WAF ARN to be set during creation, not via association.
      *
      * @param id - Unique identifier for the association
-     * @param resourceArn - ARN of the resource to associate with
+     * @param resourceArn - ARN of the regional resource (ALB, API Gateway, AppSync, Cognito User Pool)
+     *
+     * @example
+     * ```typescript
+     * // For ALB
+     * waf.associateWithResource('ALB', loadBalancer.loadBalancerArn);
+     *
+     * // For API Gateway
+     * waf.associateWithResource('API', apiGateway.apiArn);
+     * ```
      */
     associateWithResource(id, resourceArn) {
+        if (this.#scope !== 'REGIONAL') {
+            throw new Error('associateWithResource only works with REGIONAL scope. For CloudFront, pass webAclId to the distribution.');
+        }
         new CfnWebACLAssociation(this, `Association${id}`, {
             resourceArn,
             webAclArn: this.#webAcl.attrArn,
         });
+    }
+    /**
+     * Determines the WAF scope based on the AWS region
+     *
+     * @param region - AWS region (e.g., 'us-east-1', 'eu-west-1')
+     * @returns 'CLOUDFRONT' if us-east-1, otherwise 'REGIONAL'
+     */
+    static GetScopeFromRegion(region) {
+        // CloudFront WAFs must be in us-east-1
+        // Token regions (e.g., ${AWS::Region}) default to REGIONAL for safety
+        if (region === 'us-east-1') {
+            return Waf.SCOPE_CLOUDFRONT;
+        }
+        return Waf.SCOPE_REGIONAL;
     }
     /**
      * Gets the default AWS Managed Rules for best practices

@@ -9,7 +9,7 @@ describe('Waf', () => {
         const stack = new Stack(app, 'TestStack', { env: { region: 'us-east-1' } });
 
         new Waf(stack, 'TestWAF', {
-            scope: 'CLOUDFRONT',
+            scope: Waf.SCOPE_CLOUDFRONT,
             stack: { id: 'test', tags: [] },
         });
 
@@ -20,12 +20,40 @@ describe('Waf', () => {
         });
     });
 
+    it('auto-detects CLOUDFRONT scope in us-east-1', () => {
+        const app = new App();
+        const stack = new Stack(app, 'TestStack', { env: { region: 'us-east-1' } });
+
+        new Waf(stack, 'TestWAF', {
+            stack: { id: 'test', tags: [] },
+        });
+
+        const template = Template.fromStack(stack);
+        template.hasResourceProperties('AWS::WAFv2::WebACL', {
+            Scope: 'CLOUDFRONT',
+        });
+    });
+
+    it('auto-detects REGIONAL scope in other regions', () => {
+        const app = new App();
+        const stack = new Stack(app, 'TestStack', { env: { region: 'us-west-2' } });
+
+        new Waf(stack, 'TestWAF', {
+            stack: { id: 'test', tags: [] },
+        });
+
+        const template = Template.fromStack(stack);
+        template.hasResourceProperties('AWS::WAFv2::WebACL', {
+            Scope: 'REGIONAL',
+        });
+    });
+
     it('creates WAF Web ACL with REGIONAL scope', () => {
         const app = new App();
         const stack = new Stack(app, 'TestStack');
 
         new Waf(stack, 'TestWAF', {
-            scope: 'REGIONAL',
+            scope: Waf.SCOPE_REGIONAL,
             stack: { id: 'test', tags: [] },
         });
 
@@ -41,7 +69,7 @@ describe('Waf', () => {
 
         expect(() => {
             new Waf(stack, 'TestWAF', {
-                scope: 'CLOUDFRONT',
+                scope: Waf.SCOPE_CLOUDFRONT,
                 stack: { id: 'test', tags: [] },
             });
         }).toThrow('WAF Web ACL with CLOUDFRONT scope must be created in us-east-1 region');
@@ -159,5 +187,12 @@ describe('Waf', () => {
         template.hasOutput('*', {
             Description: 'WAF Web ACL ARN',
         });
+    });
+
+    it('GetScopeFromRegion returns correct scope', () => {
+        expect(Waf.GetScopeFromRegion('us-east-1')).toBe('CLOUDFRONT');
+        expect(Waf.GetScopeFromRegion('us-west-2')).toBe('REGIONAL');
+        expect(Waf.GetScopeFromRegion('eu-west-1')).toBe('REGIONAL');
+        expect(Waf.GetScopeFromRegion('ap-southeast-1')).toBe('REGIONAL');
     });
 });

@@ -18,9 +18,10 @@ AWS WAF (Web Application Firewall) construct with best practice security rules f
 ```typescript
 import { Waf } from '@designofadecade/cdk-constructs';
 
+// Scope is auto-detected from stack region
+// us-east-1 → CLOUDFRONT, others → REGIONAL
 const waf = new Waf(this, 'WAF', {
   name: 'my-app-waf',
-  scope: 'CLOUDFRONT',
   enableManagedRules: true,
   stack: { 
     id: 'my-app', 
@@ -29,11 +30,28 @@ const waf = new Waf(this, 'WAF', {
 });
 ```
 
+### Explicit Scope Configuration
+
+```typescript
+const waf = new Waf(this, 'WAF', {
+  name: 'my-app-waf',
+  scope: Waf.SCOPE_CLOUDFRONT, // Use static constant
+  enableManagedRules: true,
+  stack: { id: 'my-app', tags: [] },
+});
+
+// Or use string literals
+const waf2 = new Waf(this, 'WAF2', {
+  scope: 'REGIONAL',
+  enableManagedRules: true,
+  stack: { id: 'my-app', tags: [] },
+});
+```
+
 ### WAF with Rate Limiting
 
 ```typescript
 const waf = new Waf(this, 'WAF', {
-  scope: 'CLOUDFRONT',
   enableManagedRules: true,
   rateLimit: {
     limit: 2000, // Max 2000 requests per 5 minutes per IP
@@ -47,7 +65,6 @@ const waf = new Waf(this, 'WAF', {
 
 ```typescript
 const waf = new Waf(this, 'WAF', {
-  scope: 'CLOUDFRONT',
   geoBlock: {
     countryCodes: ['CN', 'RU', 'KP'], // Block China, Russia, North Korea
     priority: 2,
@@ -63,7 +80,7 @@ const waf = new Waf(this, 'WAF', {
 ```typescript
 const waf = new Waf(this, 'WAF', {
   name: 'production-waf',
-  scope: 'CLOUDFRONT',
+  // Scope auto-detected from region
   defaultAction: 'ALLOW',
   
   // Enable AWS Managed Rules
@@ -107,15 +124,23 @@ const waf = new Waf(this, 'WAF', {
 ```typescript
 import { CloudFront, Waf } from '@designofadecade/cdk-constructs';
 
-const cdn = new CloudFront(this, 'CDN', {
-  defaultBehavior: { origin: myOrigin },
+// Create WAF first (must be in us-east-1)
+const waf = new Waf(this, 'WAF', {
+  enableManagedRules: true,
   stack: { id: 'my-app', tags: [] },
 });
 
-const waf = new Waf(this, 'WAF', {
-  scope: 'CLOUDFRONT',
-  enableManagedRules: true,
-  distribution: cdn.distribution,
+// Pass WAF directly to CloudFront
+const cdn = new CloudFront(this, 'CDN', {
+  defaultBehavior: { origin: myOrigin },
+  waf, // Pass Waf construct
+  stack: { id: 'my-app', tags: [] },
+});
+
+// Or use WAF ARN string
+const cdn2 = new CloudFront(this, 'CDN2', {
+  defaultBehavior: { origin: myOrigin },
+  waf: waf.webAclArn, // Pass ARN string
   stack: { id: 'my-app', tags: [] },
 });
 ```
@@ -124,7 +149,7 @@ const waf = new Waf(this, 'WAF', {
 
 ```typescript
 const waf = new Waf(this, 'WAF', {
-  scope: 'REGIONAL',
+  scope: Waf.SCOPE_REGIONAL, // Use static constant for regional resources
   enableManagedRules: true,
   rateLimit: {
     limit: 5000,
@@ -141,7 +166,6 @@ waf.associateWithResource('ALB', myLoadBalancer.loadBalancerArn);
 
 ```typescript
 const waf = new Waf(this, 'WAF', {
-  scope: 'CLOUDFRONT',
   managedRules: [
     {
       name: 'AWSManagedRulesCommonRuleSet',
@@ -171,7 +195,29 @@ When `enableManagedRules: true`, the following AWS Managed Rules are automatical
 6. **Linux OS Protection** - Blocks Linux-specific exploits
 7. **POSIX OS Protection** - Blocks Unix/POSIX exploits
 
+## Static Constants
+
+### Scope Constants
+
+```typescript
+Waf.SCOPE_CLOUDFRONT  // 'CLOUDFRONT'
+Waf.SCOPE_REGIONAL    // 'REGIONAL'
+
+// Usage
+const waf = new Waf(this, 'WAF', {
+  scope: Waf.SCOPE_CLOUDFRONT,
+  stack: { id: 'my-app', tags: [] },
+});
+```
+
 ## Static Helper Methods
+
+### Scope from Region
+
+```typescript
+const scope = Waf.GetScopeFromRegion('us-east-1'); // Returns 'CLOUDFRONT'
+const scope2 = Waf.GetScopeFromRegion('us-west-2'); // Returns 'REGIONAL'
+```
 
 ### Rate Limit Configuration
 
@@ -210,16 +256,39 @@ const ipAllow = Waf.AllowIPSet('TrustedIPs', [
 |----------|------|----------|-------------|
 | `name` | `string` | No | Name for the Web ACL |
 | `stack` | `object` | Yes | Stack reference with id and tags |
-| `scope` | `'CLOUDFRONT' \| 'REGIONAL'` | Yes | Scope of the Web ACL |
+| `scope` | `'CLOUDFRONT' \| 'REGIONAL'` | No | Scope of the Web ACL (auto-detected from region if not provided) |
 | `defaultAction` | `'ALLOW' \| 'BLOCK'` | No | Default action (default: 'ALLOW') |
 | `enableManagedRules` | `boolean` | No | Enable AWS Managed Rules |
 | `managedRules` | `ManagedRuleConfig[]` | No | Custom managed rules |
 | `rateLimit` | `RateLimitConfig` | No | Rate limiting configuration |
 | `ipSets` | `IPSetConfig[]` | No | IP allow/block lists |
 | `geoBlock` | `GeoBlockConfig` | No | Geographic blocking |
-| `distribution` | `IDistribution` | No | CloudFront distribution to associate |
 
 ## Important Notes
+
+### Scope Auto-Detection
+
+If `scope` is not explicitly provided, it is automatically determined from the stack's region:
+- **us-east-1**: Returns `CLOUDFRONT`
+- **All other regions**: Returns `REGIONAL`
+
+```typescript
+// In us-east-1 - automatically uses CLOUDFRONT scope
+const stack = new Stack(app, 'WafStack', {
+  env: { region: 'us-east-1' },
+});
+const waf = new Waf(stack, 'WAF', {
+  stack: { id: 'my-app', tags: [] },
+}); // scope will be 'CLOUDFRONT'
+
+// In other regions - automatically uses REGIONAL scope
+const regionalStack = new Stack(app, 'RegionalWafStack', {
+  env: { region: 'eu-west-1' },
+});
+const regionalWaf = new Waf(regionalStack, 'WAF', {
+  stack: { id: 'my-app', tags: [] },
+}); // scope will be 'REGIONAL'
+```
 
 ### CloudFront Scope
 
@@ -251,7 +320,7 @@ Regional WAFs can be created in any region and are used with:
 ```typescript
 const waf = new Waf(this, 'EcommerceWAF', {
   name: 'ecommerce-security',
-  scope: 'CLOUDFRONT',
+  // Scope auto-detected (CLOUDFRONT in us-east-1, REGIONAL elsewhere)
   
   // Allow legitimate traffic by default
   defaultAction: 'ALLOW',
@@ -281,7 +350,6 @@ const waf = new Waf(this, 'EcommerceWAF', {
     },
   ],
   
-  distribution: cloudFrontDistribution,
   stack: { 
     id: 'ecommerce', 
     tags: [

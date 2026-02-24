@@ -33,6 +33,7 @@ import { CloudFrontTarget } from 'aws-cdk-lib/aws-route53-targets';
 import { ServicePrincipal } from 'aws-cdk-lib/aws-iam';
 import type { IBucket } from 'aws-cdk-lib/aws-s3';
 import type { Function as LambdaFunction } from './Function.js';
+import type { Waf } from './Waf.js';
 
 /**
  * Domain configuration for CloudFront distribution
@@ -222,6 +223,13 @@ export interface CloudFrontProps {
      * Optional custom error responses
      */
     readonly errorResponses?: ReadonlyArray<ErrorResponse>;
+
+    /**
+     * Optional WAF Web ACL to associate with the distribution
+     * Can be a Waf construct or a WAF Web ACL ARN string
+     * Note: WAF for CloudFront must be created in us-east-1
+     */
+    readonly waf?: Waf | string;
 }
 
 /**
@@ -233,10 +241,18 @@ export interface CloudFrontProps {
  * - Response header policies with CSP
  * - Signed URLs/cookies support
  * - Built-in CloudFront Functions for SPA and index rewriting
+ * - WAF integration for security
  * - Automatic tagging
  * 
  * @example
  * ```typescript
+ * // Create WAF (must be in us-east-1 for CloudFront)
+ * const waf = new Waf(this, 'WAF', {
+ *   enableManagedRules: true,
+ *   stack: { id: 'my-app', tags: [] },
+ * });
+ * 
+ * // Create CloudFront with WAF
  * const cdn = new CloudFront(this, 'CDN', {
  *   name: 'my-app',
  *   domain: {
@@ -253,6 +269,7 @@ export interface CloudFrontProps {
  *       name: 'my-policy',
  *     }),
  *   },
+ *   waf, // Pass WAF construct directly
  *   stack: { id: 'my-app', tags: [] },
  * });
  * 
@@ -277,6 +294,9 @@ export class CloudFront extends Construct {
 
         this.#responseHeadersPolicy = props.defaultBehavior.responseHeadersPolicy ?? CloudFront.ResponseHeaderPolicy(this, 'ResponseHeadersPolicy');
 
+        // Extract WAF ARN if Waf construct is provided
+        const webAclId = typeof props.waf === 'string' ? props.waf : props.waf?.webAclArn;
+
         this.#distribution = new Distribution(this, 'Distribution', {
             domainNames: props.domain?.names ? [...props.domain.names] : undefined,
             certificate: props.domain?.certificate,
@@ -284,6 +304,7 @@ export class CloudFront extends Construct {
             priceClass: PriceClass.PRICE_CLASS_100,
             defaultRootObject: 'index.html',
             httpVersion: 'http2and3' as any,
+            webAclId,
             defaultBehavior: {
                 origin: props.defaultBehavior.origin,
                 cachePolicy: props.cachingDisabled === true ? CachePolicy.CACHING_DISABLED : CachePolicy.CACHING_OPTIMIZED,
