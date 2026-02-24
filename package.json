@@ -1,6 +1,6 @@
 {
   "name": "@designofadecade/cdk-constructs",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "description": "TypeScript AWS CDK constructs library providing high-level abstractions for VPC, RDS, S3, CloudFront, Cognito authentication, Lambda functions, API Gateway, DynamoDB, SES, SQS, and more",
   "type": "module",
   "main": "dist/index.js",
