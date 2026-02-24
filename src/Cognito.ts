@@ -511,7 +511,7 @@ export class Cognito extends Construct {
      * Gets the entry path for the auth callback function
      */
     static CallbackAuthFunctionEntryPath(): string {
-        return (import.meta as any).resolve('@designofadecade/aws-cdk-constructs/assets/functions/cognito-auth-callback/handler.js');
+        return (import.meta as any).resolve('@designofadecade/cdk-constructs/assets/functions/cognito-auth-callback/handler.js');
     }
 
     /**
@@ -519,7 +519,7 @@ export class Cognito extends Construct {
      */
     static CallbackSignOutFunctionEntryPath(): string {
         return (import.meta as any).resolve(
-            '@designofadecade/aws-cdk-constructs/assets/functions/cognito-signout-callback/handler.js',
+            '@designofadecade/cdk-constructs/assets/functions/cognito-signout-callback/handler.js',
         );
     }
 
@@ -528,7 +528,7 @@ export class Cognito extends Construct {
      */
     static HttpApiAuthorizationFunctionEntryPath(): string {
         return (import.meta as any).resolve(
-            '@designofadecade/aws-cdk-constructs/assets/functions/cognito-auth-http-api-authorization/handler.js',
+            '@designofadecade/cdk-constructs/assets/functions/cognito-auth-http-api-authorization/handler.js',
         );
     }
 
@@ -537,7 +537,7 @@ export class Cognito extends Construct {
      */
     static PreTokenGenerationFunctionEntryPath(): string {
         return (import.meta as any).resolve(
-            '@designofadecade/aws-cdk-constructs/assets/functions/cognito-pre-token-generation/handler.js',
+            '@designofadecade/cdk-constructs/assets/functions/cognito-pre-token-generation/handler.js',
         );
     }
 
@@ -545,7 +545,7 @@ export class Cognito extends Construct {
      * Gets the entry path for the custom message function
      */
     static CustomMessageFunctionEntryPath(): string {
-        return (import.meta as any).resolve('@designofadecade/aws-cdk-constructs/assets/functions/cognito-custom-message/handler.js');
+        return (import.meta as any).resolve('@designofadecade/cdk-constructs/assets/functions/cognito-custom-message/handler.js');
     }
 
     /**
@@ -553,7 +553,7 @@ export class Cognito extends Construct {
      */
     static TokenRefreshFunctionEntryPath(): string {
         return (import.meta as any).resolve(
-            '@designofadecade/aws-cdk-constructs/assets/functions/cognito-auth-token-refresh/handler.js',
+            '@designofadecade/cdk-constructs/assets/functions/cognito-auth-token-refresh/handler.js',
         );
     }
 }

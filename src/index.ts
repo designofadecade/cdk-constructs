@@ -1,5 +1,5 @@
 /**
- * @designofadecade/aws-cdk-constructs
+ * @designofadecade/cdk-constructs
  * 
  * A collection of opinionated AWS CDK constructs for rapid infrastructure deployment
  * 
