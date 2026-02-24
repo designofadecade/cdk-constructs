@@ -764,33 +764,53 @@ npm run watch
 
 ### Publishing to GitHub Packages
 
-1. **Update version in package.json**
-   ```json
-   {
-     "version": "0.3.0"
-   }
-   ```
+#### Automatic Publishing (Recommended)
 
-2. **Build the package**
+GitHub Actions automatically publishes the package when you push a version tag:
+
+1. **Update version and create tag**
    ```bash
-   npm run build
+   npm version minor  # or patch/major
    ```
 
-3. **Run tests**
+2. **Push changes and tags**
    ```bash
-   npm test
+   git push origin main --tags
    ```
 
-4. **Authenticate with GitHub**
+3. **GitHub Actions automatically**:
+   - Runs tests
+   - Builds the package
+   - Publishes to GitHub Packages
+
+No manual authentication needed! The workflow triggers on any `v*` tag push.
+
+#### Manual Publishing (Alternative)
+
+If you prefer to publish manually:
+
+1. **Update version**
+   ```bash
+   npm version minor  # or patch/major
+   ```
+
+2. **Authenticate with GitHub**
    ```bash
    npm login --registry=https://npm.pkg.github.com
    # Username: your-github-username
    # Password: your-github-token (with write:packages permission)
    ```
 
-5. **Publish**
+3. **Build, test, and publish**
    ```bash
+   npm run build
+   npm test
    npm publish
+   ```
+
+4. **Push to GitHub**
+   ```bash
+   git push origin main --tags
    ```
 
 The package is configured to publish only to GitHub Packages via the `publishConfig` in package.json.
