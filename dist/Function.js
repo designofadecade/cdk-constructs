@@ -1,7 +1,7 @@
 import { Construct } from 'constructs';
 import { Tags, Fn, CfnOutput, Duration } from 'aws-cdk-lib';
 import { NodejsFunction, OutputFormat } from 'aws-cdk-lib/aws-lambda-nodejs';
-import { Function as LambdaFunction, Runtime, FunctionUrlAuthType, Architecture, LayerVersion, Code, } from 'aws-cdk-lib/aws-lambda';
+import { Function as LambdaFunction, Runtime, FunctionUrlAuthType, Architecture, LayerVersion, Code, Alias, } from 'aws-cdk-lib/aws-lambda';
 import { SecurityGroup } from 'aws-cdk-lib/aws-ec2';
 import { BucketDeployment, Source } from 'aws-cdk-lib/aws-s3-deployment';
 import { basename, dirname, isAbsolute, normalize, resolve } from 'node:path';
@@ -16,6 +16,8 @@ import { basename, dirname, isAbsolute, normalize, resolve } from 'node:path';
  * - ESM output format
  * - Asset copying support
  * - Function URL support
+ * - Reserved concurrency limits
+ * - Provisioned concurrency with auto-scaling
  * - Helper methods for common patterns
  *
  * @example
@@ -28,6 +30,35 @@ import { basename, dirname, isAbsolute, normalize, resolve } from 'node:path';
  *   memorySize: 1024,
  *   timeoutSeconds: 60,
  *   url: { authType: 'NONE' },
+ *   stack: { id: 'my-app', tags: [] },
+ * });
+ *
+ * // Create a function with reserved concurrency (protect downstream services)
+ * const api = new Function(this, 'ApiFunction', {
+ *   name: 'api-function',
+ *   entry: './src/api.ts',
+ *   reservedConcurrentExecutions: 50, // Limit to 50 concurrent executions
+ *   stack: { id: 'my-app', tags: [] },
+ * });
+ *
+ * // Create a function with provisioned concurrency (eliminate cold starts)
+ * const critical = new Function(this, 'CriticalFunction', {
+ *   name: 'critical-function',
+ *   entry: './src/critical.ts',
+ *   provisionedConcurrentExecutions: 10, // Keep 10 instances warm
+ *   stack: { id: 'my-app', tags: [] },
+ * });
+ *
+ * // Create a function with auto-scaling provisioned concurrency
+ * const scalable = new Function(this, 'ScalableFunction', {
+ *   name: 'scalable-function',
+ *   entry: './src/scalable.ts',
+ *   provisionedConcurrentExecutions: 5, // Start with 5 instances
+ *   autoScaling: {
+ *     minCapacity: 2,      // Scale down to 2 instances
+ *     maxCapacity: 20,     // Scale up to 20 instances
+ *     targetUtilization: 0.7, // Target 70% utilization
+ *   },
  *   stack: { id: 'my-app', tags: [] },
  * });
  *
@@ -47,6 +78,8 @@ export class Function extends Construct {
     #fn;
     #fcnUrl;
     #securityGroup;
+    #alias;
+    #autoScalingTarget;
     constructor(scope, id, props) {
         super(scope, id);
         if (!props.securityGroup && props.vpc) {
@@ -76,6 +109,7 @@ export class Function extends Construct {
                 environment: props.environment,
                 memorySize: props.memorySize ?? 512,
                 timeout: Duration.seconds(props.timeoutSeconds ?? 30),
+                reservedConcurrentExecutions: props.reservedConcurrentExecutions,
             });
         }
         else {
@@ -138,7 +172,38 @@ export class Function extends Construct {
                 timeout: Duration.seconds(props.timeoutSeconds ?? 30),
                 environment: props.environment,
                 bundling,
+                reservedConcurrentExecutions: props.reservedConcurrentExecutions,
             });
+        }
+        // Configure provisioned concurrency if specified
+        if (props.provisionedConcurrentExecutions !== undefined) {
+            // Need to use the concrete function type to access currentVersion
+            const concreteFunction = this.#fn instanceof NodejsFunction ? this.#fn : this.#fn;
+            const version = concreteFunction.currentVersion;
+            this.#alias = new Alias(this, 'Alias', {
+                aliasName: 'live',
+                version,
+                provisionedConcurrentExecutions: props.provisionedConcurrentExecutions,
+            });
+            // Configure auto-scaling for provisioned concurrency
+            if (props.autoScaling) {
+                const minCapacity = props.autoScaling.minCapacity ?? 1;
+                const maxCapacity = props.autoScaling.maxCapacity;
+                const targetUtilization = props.autoScaling.targetUtilization ?? 0.7;
+                if (minCapacity > maxCapacity) {
+                    throw new Error(`minCapacity (${minCapacity}) cannot be greater than maxCapacity (${maxCapacity})`);
+                }
+                if (targetUtilization <= 0 || targetUtilization > 1) {
+                    throw new Error(`targetUtilization must be between 0 and 1, got ${targetUtilization}`);
+                }
+                this.#autoScalingTarget = this.#alias.addAutoScaling({
+                    minCapacity,
+                    maxCapacity,
+                });
+                this.#autoScalingTarget.scaleOnUtilization({
+                    utilizationTarget: targetUtilization,
+                });
+            }
         }
         const urlConfig = props.functionUrl ?? props.url;
         if (urlConfig) {
@@ -196,6 +261,18 @@ export class Function extends Construct {
      */
     get securityGroup() {
         return this.#securityGroup;
+    }
+    /**
+     * Gets the Lambda alias (if provisioned concurrency is configured)
+     */
+    get alias() {
+        return this.#alias;
+    }
+    /**
+     * Gets the auto-scaling target (if auto-scaling is configured)
+     */
+    get autoScalingTarget() {
+        return this.#autoScalingTarget;
     }
     /**
      * Adds the AWS Parameters and Secrets Lambda Extension layer
