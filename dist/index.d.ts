@@ -7,6 +7,8 @@
  */
 export { Vpc } from './Vpc.js';
 export type { VpcProps, VpcEndpointType } from './Vpc.js';
+export { Waf } from './Waf.js';
+export type { WafProps, ManagedRuleConfig, RateLimitConfig, IPSetConfig, GeoBlockConfig } from './Waf.js';
 export { CloudFront } from './CloudFront.js';
 export type { CloudFrontProps, DomainConfig, DefaultBehaviorConfig, BehaviorOptions, HttpBehaviorOptions, FunctionBehaviorOptions, CspConfig, ResponseHeaderPolicyOptions, S3BucketOriginOptions, } from './CloudFront.js';
 export { EventBridge } from './EventBridge.js';

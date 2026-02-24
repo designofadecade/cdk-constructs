@@ -13,6 +13,7 @@ Comprehensive documentation for all CDK constructs in this library.
 - **[Vpc](./Vpc.md)** - Virtual Private Cloud configuration
 - **[HttpApi](./HttpApi.md)** - API Gateway HTTP APIs
 - **[CloudFront](./CloudFront.md)** - CDN distributions
+- **[Waf](./Waf.md)** - Web Application Firewall with best practice rules
 
 ### Storage
 - **[S3Bucket](./S3Bucket.md)** - S3 buckets with security best practices

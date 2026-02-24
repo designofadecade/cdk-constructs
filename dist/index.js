@@ -6,6 +6,7 @@
  * @module
  */
 export { Vpc } from './Vpc.js';
+export { Waf } from './Waf.js';
 export { CloudFront } from './CloudFront.js';
 export { EventBridge } from './EventBridge.js';
 export { S3Bucket } from './S3Bucket.js';
