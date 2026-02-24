@@ -1,5 +1,5 @@
 import { Construct } from 'constructs';
-import { HttpApi as AwsHttpApi, type IHttpRouteAuthorizer } from 'aws-cdk-lib/aws-apigatewayv2';
+import { HttpApi as AwsHttpApi, CorsHttpMethod, type IHttpRouteAuthorizer } from 'aws-cdk-lib/aws-apigatewayv2';
 import { HttpLambdaAuthorizer } from 'aws-cdk-lib/aws-apigatewayv2-authorizers';
 import type { IFunction } from 'aws-cdk-lib/aws-lambda';
 /**
@@ -16,6 +16,27 @@ export interface AddFunctionIntegrationOptions {
     readonly authorizer?: IHttpRouteAuthorizer;
 }
 /**
+ * CORS configuration for HTTP API
+ */
+export interface CorsConfig {
+    /**
+     * Allowed origins (default: ['*'])
+     */
+    readonly allowOrigins?: string[];
+    /**
+     * Allowed HTTP methods (default: GET, POST, PUT, DELETE, OPTIONS)
+     */
+    readonly allowMethods?: CorsHttpMethod[];
+    /**
+     * Allowed headers (optional)
+     */
+    readonly allowHeaders?: string[];
+    /**
+     * Whether to allow credentials (optional)
+     */
+    readonly allowCredentials?: boolean;
+}
+/**
  * Properties for configuring the HTTP API
  */
 export interface HttpApiProps {
@@ -23,6 +44,10 @@ export interface HttpApiProps {
      * Optional name for the API. If not provided, uses the stack ID
      */
     readonly name?: string;
+    /**
+     * Optional CORS configuration. If not provided, CORS is disabled.
+     */
+    readonly cors?: CorsConfig | boolean;
     /**
      * The stack reference containing ID and tags
      */
@@ -54,8 +79,27 @@ export interface CreateAuthorizerFunctionProps {
  *
  * @example
  * ```typescript
+ * // API without CORS (default)
  * const api = new HttpApi(this, 'Api', {
  *   name: 'my-api',
+ *   stack: { id: 'my-app', tags: [] },
+ * });
+ *
+ * // API with CORS enabled (allow all origins)
+ * const apiWithCors = new HttpApi(this, 'ApiWithCors', {
+ *   name: 'my-api',
+ *   cors: true,
+ *   stack: { id: 'my-app', tags: [] },
+ * });
+ *
+ * // API with custom CORS configuration
+ * const apiCustomCors = new HttpApi(this, 'ApiCustomCors', {
+ *   name: 'my-api',
+ *   cors: {
+ *     allowOrigins: ['https://myapp.com'],
+ *     allowMethods: [CorsHttpMethod.GET, CorsHttpMethod.POST],
+ *     allowCredentials: true,
+ *   },
  *   stack: { id: 'my-app', tags: [] },
  * });
  *
@@ -68,7 +112,7 @@ export interface CreateAuthorizerFunctionProps {
  *
  * // Add a protected route
  * api.addFunctionIntegration('/users', usersFunction, ['GET', 'POST'], {
- * authorizer,
+ *   authorizer,
  * });
  *
  * // Add a public route

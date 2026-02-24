@@ -18,7 +18,7 @@ describe('HttpApi', () => {
         template.resourceCountIs('AWS::ApiGatewayV2::Api', 1);
     });
 
-    it('enables CORS by default', () => {
+    it('disables CORS by default', () => {
         const app = new App();
         const stack = new Stack(app, 'TestStack');
 
@@ -29,9 +29,47 @@ describe('HttpApi', () => {
 
         const template = Template.fromStack(stack);
         template.hasResourceProperties('AWS::ApiGatewayV2::Api', {
+            Name: 'test-api',
+        });
+    });
+
+    it('enables CORS when configured', () => {
+        const app = new App();
+        const stack = new Stack(app, 'TestStack');
+
+        new HttpApi(stack, 'TestApi', {
+            name: 'test-api',
+            cors: true,
+            stack: { id: 'test', tags: [] },
+        });
+
+        const template = Template.fromStack(stack);
+        template.hasResourceProperties('AWS::ApiGatewayV2::Api', {
             CorsConfiguration: {
                 AllowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
                 AllowOrigins: ['*'],
+            },
+        });
+    });
+
+    it('allows custom CORS configuration', () => {
+        const app = new App();
+        const stack = new Stack(app, 'TestStack');
+
+        new HttpApi(stack, 'TestApi', {
+            name: 'test-api',
+            cors: {
+                allowOrigins: ['https://example.com'],
+                allowMethods: ['GET', 'POST'],
+            },
+            stack: { id: 'test', tags: [] },
+        });
+
+        const template = Template.fromStack(stack);
+        template.hasResourceProperties('AWS::ApiGatewayV2::Api', {
+            CorsConfiguration: {
+                AllowMethods: ['GET', 'POST'],
+                AllowOrigins: ['https://example.com'],
             },
         });
     });

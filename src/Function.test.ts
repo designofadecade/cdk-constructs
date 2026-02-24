@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { App, Stack } from 'aws-cdk-lib';
 import { Template, Match } from 'aws-cdk-lib/assertions';
 import { Vpc } from 'aws-cdk-lib/aws-ec2';
+import { Code } from 'aws-cdk-lib/aws-lambda';
 import { Function } from '../src/Function.js';
 
 describe('Function', () => {
@@ -10,7 +11,7 @@ describe('Function', () => {
         const stack = new Stack(app, 'TestStack');
 
         new Function(stack, 'TestFunction', {
-            entry: './tests/fixtures/test-handler.ts',
+            code: Code.fromInline('exports.handler = async () => ({ statusCode: 200 })'),
             name: 'test-function',
             stack: { id: 'test', tags: [] },
         });
@@ -19,19 +20,19 @@ describe('Function', () => {
         template.resourceCountIs('AWS::Lambda::Function', 1);
     });
 
-    it('uses Node.js 20 runtime', () => {
+    it('uses Node.js 24 runtime', () => {
         const app = new App();
         const stack = new Stack(app, 'TestStack');
 
         new Function(stack, 'TestFunction', {
-            entry: './tests/fixtures/test-handler.ts',
+            code: Code.fromInline('exports.handler = async () => ({ statusCode: 200 })'),
             name: 'test-function',
             stack: { id: 'test', tags: [] },
         });
 
         const template = Template.fromStack(stack);
         template.hasResourceProperties('AWS::Lambda::Function', {
-            Runtime: 'nodejs20.x',
+            Runtime: 'nodejs24.x',
         });
     });
 
@@ -41,7 +42,7 @@ describe('Function', () => {
         const vpc = new Vpc(stack, 'TestVpc');
 
         new Function(stack, 'TestFunction', {
-            entry: './tests/fixtures/test-handler.ts',
+            code: Code.fromInline('exports.handler = async () => ({ statusCode: 200 })'),
             name: 'test-function',
             vpc,
             stack: { id: 'test', tags: [] },
@@ -61,7 +62,7 @@ describe('Function', () => {
         const stack = new Stack(app, 'TestStack');
 
         new Function(stack, 'TestFunction', {
-            entry: './tests/fixtures/test-handler.ts',
+            code: Code.fromInline('exports.handler = async () => ({ statusCode: 200 })'),
             name: 'test-function',
             functionUrl: {
                 authType: 'NONE',
@@ -78,7 +79,7 @@ describe('Function', () => {
         const stack = new Stack(app, 'TestStack');
 
         new Function(stack, 'TestFunction', {
-            entry: './tests/fixtures/test-handler.ts',
+            code: Code.fromInline('exports.handler = async () => ({ statusCode: 200 })'),
             name: 'test-function',
             stack: { id: 'test', tags: [] },
         });
@@ -94,7 +95,7 @@ describe('Function', () => {
         const stack = new Stack(app, 'TestStack');
 
         const func = new Function(stack, 'TestFunction', {
-            entry: './tests/fixtures/test-handler.ts',
+            code: Code.fromInline('exports.handler = async () => ({ statusCode: 200 })'),
             name: 'test-function',
             stack: { id: 'test', tags: [] },
         });

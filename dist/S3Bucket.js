@@ -1,6 +1,7 @@
 import { Construct } from 'constructs';
 import { RemovalPolicy, Duration, Tags, CfnOutput } from 'aws-cdk-lib';
-import { Bucket, BlockPublicAccess, BucketEncryption } from 'aws-cdk-lib/aws-s3';
+import { Bucket, BlockPublicAccess, BucketEncryption, EventType } from 'aws-cdk-lib/aws-s3';
+import { LambdaDestination } from 'aws-cdk-lib/aws-s3-notifications';
 /**
  * A CDK construct that creates a secure S3 bucket with common configurations
  *
@@ -95,5 +96,11 @@ export class S3Bucket extends Construct {
             expiration: Duration.days(days),
             prefix: prefix ?? undefined,
         });
+    }
+    addObjectCreatedNotification(func, ...filters) {
+        this.#bucket.addEventNotification(EventType.OBJECT_CREATED, new LambdaDestination(func), ...filters);
+    }
+    addObjectRemoveNotification(func, ...filters) {
+        this.#bucket.addEventNotification(EventType.OBJECT_REMOVED, new LambdaDestination(func), ...filters);
     }
 }

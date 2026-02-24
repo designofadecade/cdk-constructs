@@ -14,8 +14,27 @@ import { HttpLambdaAuthorizer, HttpLambdaResponseType } from 'aws-cdk-lib/aws-ap
  *
  * @example
  * ```typescript
+ * // API without CORS (default)
  * const api = new HttpApi(this, 'Api', {
  *   name: 'my-api',
+ *   stack: { id: 'my-app', tags: [] },
+ * });
+ *
+ * // API with CORS enabled (allow all origins)
+ * const apiWithCors = new HttpApi(this, 'ApiWithCors', {
+ *   name: 'my-api',
+ *   cors: true,
+ *   stack: { id: 'my-app', tags: [] },
+ * });
+ *
+ * // API with custom CORS configuration
+ * const apiCustomCors = new HttpApi(this, 'ApiCustomCors', {
+ *   name: 'my-api',
+ *   cors: {
+ *     allowOrigins: ['https://myapp.com'],
+ *     allowMethods: [CorsHttpMethod.GET, CorsHttpMethod.POST],
+ *     allowCredentials: true,
+ *   },
  *   stack: { id: 'my-app', tags: [] },
  * });
  *
@@ -28,7 +47,7 @@ import { HttpLambdaAuthorizer, HttpLambdaResponseType } from 'aws-cdk-lib/aws-ap
  *
  * // Add a protected route
  * api.addFunctionIntegration('/users', usersFunction, ['GET', 'POST'], {
- * authorizer,
+ *   authorizer,
  * });
  *
  * // Add a public route
@@ -39,12 +58,26 @@ export class HttpApi extends Construct {
     #httpApi;
     constructor(scope, id, props) {
         super(scope, id);
+        // Configure CORS if enabled
+        let corsConfig;
+        if (props.cors) {
+            const cors = typeof props.cors === 'boolean' ? {} : props.cors;
+            corsConfig = {
+                allowMethods: cors.allowMethods ?? [
+                    CorsHttpMethod.GET,
+                    CorsHttpMethod.POST,
+                    CorsHttpMethod.PUT,
+                    CorsHttpMethod.DELETE,
+                    CorsHttpMethod.OPTIONS,
+                ],
+                allowOrigins: cors.allowOrigins ?? ['*'],
+                allowHeaders: cors.allowHeaders,
+                allowCredentials: cors.allowCredentials,
+            };
+        }
         this.#httpApi = new AwsHttpApi(this, 'HttpApi', {
             apiName: props.name ?? props.stack.id,
-            corsPreflight: {
-                allowMethods: [CorsHttpMethod.GET, CorsHttpMethod.POST, CorsHttpMethod.PUT, CorsHttpMethod.DELETE, CorsHttpMethod.OPTIONS],
-                allowOrigins: ['*'],
-            },
+            corsPreflight: corsConfig,
         });
         props.stack.tags.forEach(({ key, value }) => {
             Tags.of(this.#httpApi).add(key, value);

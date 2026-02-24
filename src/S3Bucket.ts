@@ -1,6 +1,8 @@
 import { Construct } from 'constructs';
 import { RemovalPolicy, Duration, Tags, CfnOutput } from 'aws-cdk-lib';
-import { Bucket, BlockPublicAccess, BucketEncryption, type IBucket } from 'aws-cdk-lib/aws-s3';
+import { Bucket, BlockPublicAccess, BucketEncryption, EventType, NotificationKeyFilter, type IBucket } from 'aws-cdk-lib/aws-s3';
+import { LambdaDestination } from 'aws-cdk-lib/aws-s3-notifications';
+import { IFunction } from 'aws-cdk-lib/aws-lambda';
 import type { IGrantable } from 'aws-cdk-lib/aws-iam';
 
 /**
@@ -73,7 +75,7 @@ export class S3Bucket extends Construct {
     /**
      * Gets the S3 bucket instance
      */
-    get bucket(): IBucket {
+    get bucket(): Bucket {
         return this.#bucket;
     }
 
@@ -125,4 +127,21 @@ export class S3Bucket extends Construct {
             prefix: prefix ?? undefined,
         });
     }
+
+    addObjectCreatedNotification(func: IFunction, ...filters: NotificationKeyFilter[]): void {
+        this.#bucket.addEventNotification(
+            EventType.OBJECT_CREATED,
+            new LambdaDestination(func),
+            ...filters
+        );
+    }
+
+    addObjectRemoveNotification(func: IFunction, ...filters: NotificationKeyFilter[]): void {
+        this.#bucket.addEventNotification(
+            EventType.OBJECT_REMOVED,
+            new LambdaDestination(func),
+            ...filters
+        );
+    }
+
 }

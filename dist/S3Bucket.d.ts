@@ -1,5 +1,6 @@
 import { Construct } from 'constructs';
-import { type IBucket } from 'aws-cdk-lib/aws-s3';
+import { Bucket, NotificationKeyFilter } from 'aws-cdk-lib/aws-s3';
+import { IFunction } from 'aws-cdk-lib/aws-lambda';
 import type { IGrantable } from 'aws-cdk-lib/aws-iam';
 /**
  * Properties for configuring an S3 bucket
@@ -50,7 +51,7 @@ export declare class S3Bucket extends Construct {
     /**
      * Gets the S3 bucket instance
      */
-    get bucket(): IBucket;
+    get bucket(): Bucket;
     /**
      * Gets the bucket name
      */
@@ -83,4 +84,6 @@ export declare class S3Bucket extends Construct {
      * ```
      */
     addExpirationLifecycleRule(ruleName: string, days?: number, prefix?: string | null): void;
+    addObjectCreatedNotification(func: IFunction, ...filters: NotificationKeyFilter[]): void;
+    addObjectRemoveNotification(func: IFunction, ...filters: NotificationKeyFilter[]): void;
 }

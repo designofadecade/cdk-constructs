@@ -198,7 +198,7 @@ export class Function extends Construct {
                     : this.#securityGroup
                         ? [this.#securityGroup]
                         : undefined,
-                runtime: Runtime.NODEJS_20_X,
+                runtime: Runtime.NODEJS_24_X,
                 handler: 'index.handler',
                 code: props.code,
                 architecture: Architecture.ARM_64,
@@ -266,7 +266,7 @@ export class Function extends Construct {
                     : this.#securityGroup
                         ? [this.#securityGroup]
                         : undefined,
-                runtime: Runtime.NODEJS_20_X,
+                runtime: Runtime.NODEJS_24_X,
                 entry: entryPath,
                 architecture: Architecture.ARM_64,
                 memorySize: props.memorySize ?? 512,

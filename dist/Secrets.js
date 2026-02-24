@@ -39,7 +39,7 @@ export class Secrets extends Construct {
      * A placeholder SecretValue that should be replaced manually in the AWS Console
      * Use this for secrets that should not be stored in code
      */
-    static REPLACE_ME = '__REPLACE_ME__';
+    static REPLACE_ME = SecretValue.unsafePlainText('REPLACE_ME');
     #secret;
     constructor(scope, id, props) {
         super(scope, id);
@@ -67,7 +67,7 @@ export class Secrets extends Construct {
         new CfnOutput(this, 'SecretArn', {
             value: this.#secret.secretArn,
             description: 'Secret ARN',
-            exportName: `${secretName}-arn`,
+            exportName: `${secretName.replaceAll('/', '-')}-arn`,
         });
     }
     /**

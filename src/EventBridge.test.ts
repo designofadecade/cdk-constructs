@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { App, Stack } from 'aws-cdk-lib';
 import { Template, Match } from 'aws-cdk-lib/assertions';
+import { Code, Runtime } from 'aws-cdk-lib/aws-lambda';
 import { EventBridge } from '../src/EventBridge.js';
 import { Function } from '../src/Function.js';
 
@@ -9,7 +10,7 @@ describe('EventBridge', () => {
         const app = new App();
         const stack = new Stack(app, 'TestStack');
         const lambda = new Function(stack, 'TestLambda', {
-            entry: './tests/fixtures/test-handler.ts',
+            code: Code.fromInline('exports.handler = async () => ({ statusCode: 200 })'),
             name: 'test-function',
             stack: { id: 'test', tags: [] },
         });
@@ -30,7 +31,7 @@ describe('EventBridge', () => {
         const app = new App();
         const stack = new Stack(app, 'TestStack');
         const lambda = new Function(stack, 'TestLambda', {
-            entry: './tests/fixtures/test-handler.ts',
+            code: Code.fromInline('exports.handler = async () => ({ statusCode: 200 })'),
             name: 'test-function',
             stack: { id: 'test', tags: [] },
         });
@@ -53,7 +54,7 @@ describe('EventBridge', () => {
         const app = new App();
         const stack = new Stack(app, 'TestStack');
         const lambda = new Function(stack, 'TestLambda', {
-            entry: './tests/fixtures/test-handler.ts',
+            code: Code.fromInline('exports.handler = async () => ({ statusCode: 200 })'),
             name: 'test-function',
             stack: { id: 'test', tags: [] },
         });
