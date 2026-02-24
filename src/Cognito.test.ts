@@ -45,7 +45,7 @@ describe('Cognito', () => {
         template.resourceCountIs('AWS::Cognito::UserPoolClient', 1);
     });
 
-    it('configures MFA when requested', () => {
+    it('configures required MFA when mfa: true', () => {
         const app = new App();
         const stack = new Stack(app, 'TestStack');
 
@@ -56,7 +56,38 @@ describe('Cognito', () => {
 
         const template = Template.fromStack(stack);
         template.hasResourceProperties('AWS::Cognito::UserPool', {
+            MfaConfiguration: 'ON',
+        });
+    });
+
+    it('configures optional MFA when mfa: false', () => {
+        const app = new App();
+        const stack = new Stack(app, 'TestStack');
+
+        new Cognito(stack, 'TestCognito', {
+            mfa: false,
+            stack: { id: 'test', label: 'Test', tags: [] },
+        });
+
+        const template = Template.fromStack(stack);
+        template.hasResourceProperties('AWS::Cognito::UserPool', {
             MfaConfiguration: 'OPTIONAL',
+        });
+    });
+
+    it('configures MFA with detailed config', () => {
+        const app = new App();
+        const stack = new Stack(app, 'TestStack');
+
+        new Cognito(stack, 'TestCognito', {
+            mfa: { required: true, mfaSecondFactor: { sms: false, otp: true } },
+            stack: { id: 'test', label: 'Test', tags: [] },
+        });
+
+        const template = Template.fromStack(stack);
+        template.hasResourceProperties('AWS::Cognito::UserPool', {
+            MfaConfiguration: 'ON',
+            EnabledMfas: ['SOFTWARE_TOKEN_MFA'],
         });
     });
 

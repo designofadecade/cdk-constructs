@@ -61,7 +61,7 @@ export class Cognito extends Construct {
             },
             ...(props.mfa != null
                 ? {
-                    mfa: Mfa.OPTIONAL,
+                    mfa: (typeof props.mfa === 'boolean' ? props.mfa : props.mfa.required) ? Mfa.REQUIRED : Mfa.OPTIONAL,
                     mfaSecondFactor: props.mfaSecondFactor ??
                         (typeof props.mfa === 'object' ? props.mfa.mfaSecondFactor : undefined) ?? {
                         sms: false,
