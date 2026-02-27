@@ -6,6 +6,7 @@ describe('cognito-custom-message handler', () => {
         vi.clearAllMocks();
         vi.resetModules();
         delete process.env.COGNITO_FORGOT_PASSWORD_SUBJECT;
+        delete process.env.COGNITO_MFA_SUBJECT;
     });
 
     // Helper to call handler with required 3-arg signature
@@ -187,5 +188,111 @@ describe('cognito-custom-message handler', () => {
         // Verify the code appears in the message (template may have it multiple times)
         const codeOccurrences = (result.response.emailMessage.match(/999888/g) || []).length;
         expect(codeOccurrences).toBeGreaterThan(0);
+    });
+
+    it('customizes MFA email with HTML template', async () => {
+        const { handler } = await import('./handler.js');
+
+        const event: CustomMessageTriggerEvent = {
+            version: '1',
+            triggerSource: 'CustomMessage_Authentication',
+            region: 'us-east-1',
+            userPoolId: 'us-east-1_test123',
+            userName: 'testuser',
+            callerContext: {
+                awsSdkVersion: '1',
+                clientId: 'test-client-id',
+            },
+            request: {
+                userAttributes: {
+                    sub: '12345678-1234-1234-1234-123456789012',
+                    email: 'test@example.com',
+                },
+                codeParameter: '789012',
+                linkParameter: '',
+                usernameParameter: null,
+            },
+            response: {
+                smsMessage: null,
+                emailSubject: '',
+                emailMessage: '',
+            },
+        };
+
+        const result = await callHandler(handler, event);
+
+        expect(result.response.emailSubject).toBe('Your Verification Code');
+        expect(result.response.emailMessage).toContain('789012');
+        expect(result.response.emailMessage).toContain(String(new Date().getFullYear()));
+        expect(result.response.emailMessage).toContain('Multi-Factor Authentication');
+    });
+
+    it('uses custom MFA subject when environment variable is set', async () => {
+        process.env.COGNITO_MFA_SUBJECT = 'Security Code for Login';
+
+        const { handler } = await import('./handler.js');
+
+        const event: CustomMessageTriggerEvent = {
+            version: '1',
+            triggerSource: 'CustomMessage_Authentication',
+            region: 'us-east-1',
+            userPoolId: 'us-east-1_test123',
+            userName: 'testuser',
+            callerContext: {
+                awsSdkVersion: '1',
+                clientId: 'test-client-id',
+            },
+            request: {
+                userAttributes: {
+                    sub: '12345678-1234-1234-1234-123456789012',
+                    email: 'test@example.com',
+                },
+                codeParameter: '456789',
+                linkParameter: '',
+                usernameParameter: null,
+            },
+            response: {
+                smsMessage: null,
+                emailSubject: '',
+                emailMessage: '',
+            },
+        };
+
+        const result = await callHandler(handler, event);
+
+        expect(result.response.emailSubject).toBe('Security Code for Login');
+        expect(result.response.emailMessage).toContain('456789');
+    });
+
+    it('throws error when MFA code parameter is missing', async () => {
+        const { handler } = await import('./handler.js');
+
+        const event: CustomMessageTriggerEvent = {
+            version: '1',
+            triggerSource: 'CustomMessage_Authentication',
+            region: 'us-east-1',
+            userPoolId: 'us-east-1_test123',
+            userName: 'testuser',
+            callerContext: {
+                awsSdkVersion: '1',
+                clientId: 'test-client-id',
+            },
+            request: {
+                userAttributes: {
+                    sub: '12345678-1234-1234-1234-123456789012',
+                    email: 'test@example.com',
+                },
+                codeParameter: '',
+                linkParameter: '',
+                usernameParameter: null,
+            },
+            response: {
+                smsMessage: null,
+                emailSubject: '',
+                emailMessage: '',
+            },
+        };
+
+        await expect(callHandler(handler, event)).rejects.toThrow('Code parameter not found');
     });
 });

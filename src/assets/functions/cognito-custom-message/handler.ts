@@ -3,26 +3,50 @@ import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const templatePath = resolve(dirname(fileURLToPath((import.meta as any).url)), 'forgotpassword.html');
-const defaultTemplateHtml = readFileSync(templatePath, 'utf8');
-const defaultSubject = 'Password Reset';
+const __dirname = dirname(fileURLToPath((import.meta as any).url));
+
+// Load templates
+const forgotPasswordTemplatePath = resolve(__dirname, 'forgotpassword.html');
+const mfaTemplatePath = resolve(__dirname, 'mfa.html');
+const forgotPasswordTemplateHtml = readFileSync(forgotPasswordTemplatePath, 'utf8');
+const mfaTemplateHtml = readFileSync(mfaTemplatePath, 'utf8');
+
+// Default subjects
+const defaultForgotPasswordSubject = 'Password Reset';
+const defaultMfaSubject = 'Your Verification Code';
 
 /**
  * Lambda handler for Cognito custom message trigger
- * Customizes the forgot password email with HTML template
+ * Customizes email messages for forgot password and MFA with HTML templates
  */
 export const handler: CustomMessageTriggerHandler = async (event: CustomMessageTriggerEvent): Promise<CustomMessageTriggerEvent> => {
     try {
+        const code = event?.request?.codeParameter;
+
+        if (!code) {
+            console.error('Missing codeParameter in event');
+            throw new Error('Code parameter not found');
+        }
+
+        const currentYear = String(new Date().getFullYear());
+
+        // Handle Forgot Password
         if (event?.triggerSource === 'CustomMessage_ForgotPassword') {
-            const code = event?.request?.codeParameter;
+            const subject = process.env.COGNITO_FORGOT_PASSWORD_SUBJECT || defaultForgotPasswordSubject;
+            const htmlMessage = forgotPasswordTemplateHtml
+                .replaceAll('{code}', code)
+                .replaceAll('{year}', currentYear);
 
-            if (!code) {
-                console.error('Missing codeParameter in event');
-                throw new Error('Code parameter not found');
-            }
+            event.response.emailSubject = subject;
+            event.response.emailMessage = htmlMessage;
+        }
 
-            const subject = process.env.COGNITO_FORGOT_PASSWORD_SUBJECT || defaultSubject;
-            const htmlMessage = defaultTemplateHtml.replaceAll('{code}', code).replaceAll('{year}', String(new Date().getFullYear()));
+        // Handle MFA Code (sent during authentication)
+        if (event?.triggerSource === 'CustomMessage_Authentication') {
+            const subject = process.env.COGNITO_MFA_SUBJECT || defaultMfaSubject;
+            const htmlMessage = mfaTemplateHtml
+                .replaceAll('{code}', code)
+                .replaceAll('{year}', currentYear);
 
             event.response.emailSubject = subject;
             event.response.emailMessage = htmlMessage;

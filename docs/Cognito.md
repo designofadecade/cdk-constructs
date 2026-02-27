@@ -61,6 +61,53 @@ const auth = new Cognito(this, 'Auth', {
 - A verified domain or email address
 - Sufficient SES sending limits for your use case
 
+## Customizing MFA and Password Reset Emails
+
+The construct includes Lambda triggers that style MFA and password reset emails with HTML templates. To use custom email styling:
+
+```typescript
+import { Cognito } from '@designofadecade/cdk-constructs';
+import { Function as LambdaFunction } from 'aws-cdk-lib/aws-lambda';
+
+// Create the custom message Lambda function
+const customMessageFn = new LambdaFunction(this, 'CustomMessage', {
+  runtime: Runtime.NODEJS_20_X,
+  handler: 'handler.handler',
+  code: Code.fromAsset(Cognito.CustomMessageFunctionEntryPath()),
+  environment: {
+    // Optional: Customize email subjects
+    COGNITO_FORGOT_PASSWORD_SUBJECT: 'Reset Your Password',
+    COGNITO_MFA_SUBJECT: 'Your Security Code',
+  },
+});
+
+// Create Cognito with the custom message trigger
+const auth = new Cognito(this, 'Auth', {
+  stack: { id: 'my-app', label: 'My App', tags: [] },
+  mfa: {
+    required: true,
+    mfaSecondFactor: { sms: false, otp: true, email: true },
+  },
+  sesEmail: {
+    fromEmail: 'noreply@example.com',
+    verifiedDomain: 'example.com',
+  },
+  lambdaTriggers: {
+    customMessage: customMessageFn,
+  },
+});
+```
+
+The custom message handler automatically styles:
+- **Password Reset Emails** - Modern HTML template with verification code
+- **MFA Emails** - Security-focused design with authentication code
+
+Both templates include:
+- Responsive design for mobile and desktop
+- Clear security warnings
+- Professional styling matching your brand
+- Auto-updating copyright year
+
 ## Properties
 
 ### CognitoProps
