@@ -183,7 +183,7 @@ export interface LoadedBranding {
  *
  * Features:
  * - Email-based authentication
- * - MFA support (optional or required)
+ * - MFA support (optional or required) with SMS, TOTP, and Email options
  * - Custom domains with Route53 integration
  * - SES email integration
  * - Multiple app clients with per-client branding
@@ -195,7 +195,7 @@ export interface LoadedBranding {
  * ```typescript
  * const userPool = new Cognito(this, 'UserPool', {
  *   stack: { id: 'my-app', label: 'My App', tags: [] },
- *   mfa: { required: true, mfaSecondFactor: { sms: false, otp: true } },
+ *   mfa: { required: true, mfaSecondFactor: { sms: false, otp: true, email: true } },
  *   customDomain: {
  *     domain: 'auth.example.com',
  *     certificate: myCertificate,
