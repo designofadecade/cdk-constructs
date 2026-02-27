@@ -237,7 +237,7 @@ export interface LoadedBranding {
  * 
  * Features:
  * - Email-based authentication
- * - MFA support (optional or required)
+ * - MFA support (optional or required) with SMS, TOTP, and Email options
  * - Custom domains with Route53 integration
  * - SES email integration
  * - Multiple app clients with per-client branding
@@ -249,7 +249,7 @@ export interface LoadedBranding {
  * ```typescript
  * const userPool = new Cognito(this, 'UserPool', {
  *   stack: { id: 'my-app', label: 'My App', tags: [] },
- *   mfa: { required: true, mfaSecondFactor: { sms: false, otp: true } },
+ *   mfa: { required: true, mfaSecondFactor: { sms: false, otp: true, email: true } },
  *   customDomain: {
  *     domain: 'auth.example.com',
  *     certificate: myCertificate,
@@ -278,6 +278,33 @@ export class Cognito extends Construct {
     constructor(scope: Construct, id: string, props: CognitoProps) {
         super(scope, id);
 
+        // Calculate MFA second factor configuration
+        // Email MFA requires SES to be configured
+        const getMfaSecondFactor = (): MfaSecondFactor | undefined => {
+            if (props.mfa == null) return undefined;
+
+            const explicitConfig = props.mfaSecondFactor ??
+                (typeof props.mfa === 'object' ? props.mfa.mfaSecondFactor : undefined);
+
+            if (explicitConfig) {
+                // If email MFA is requested but SES is not configured, remove email
+                if (explicitConfig.email && !props.sesEmail) {
+                    return {
+                        ...explicitConfig,
+                        email: false,
+                    };
+                }
+                return explicitConfig;
+            }
+
+            // Default configuration
+            return {
+                sms: false,
+                otp: true,
+                email: props.sesEmail != null, // Only enable email MFA if SES is configured
+            };
+        };
+
         this.#userPool = new UserPool(this, 'UserPool', {
             userPoolName: props.stack.label,
             signInCaseSensitive: false,
@@ -290,12 +317,7 @@ export class Cognito extends Construct {
             ...(props.mfa != null
                 ? {
                     mfa: (typeof props.mfa === 'boolean' ? props.mfa : props.mfa.required) ? Mfa.REQUIRED : Mfa.OPTIONAL,
-                    mfaSecondFactor:
-                        props.mfaSecondFactor ??
-                        (typeof props.mfa === 'object' ? props.mfa.mfaSecondFactor : undefined) ?? {
-                            sms: false,
-                            otp: true,
-                        },
+                    mfaSecondFactor: getMfaSecondFactor(),
                 }
                 : {}),
             standardAttributes: {

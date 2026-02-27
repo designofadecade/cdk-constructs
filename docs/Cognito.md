@@ -5,7 +5,10 @@ CDK construct for creating Amazon Cognito User Pools with authentication flows.
 ## Features
 
 - Email-based authentication
-- Optional MFA (TOTP)
+- Optional MFA with multiple methods:
+  - TOTP (Time-based One-Time Password)
+  - SMS (text message)
+  - Email OTP (One-Time Password via email)
 - Custom message handling
 - Pre-token generation hooks
 - OAuth 2.0 support
@@ -22,6 +25,41 @@ const auth = new Cognito(this, 'Auth', {
   stack: { id: 'my-app', tags: [] },
 });
 ```
+
+## MFA Configuration
+
+The construct supports multiple MFA methods:
+
+```typescript
+// Simple boolean - enables optional MFA with TOTP (and Email if SES is configured)
+const auth = new Cognito(this, 'Auth', {
+  stack: { id: 'my-app', label: 'My App', tags: [] },
+  mfa: true,
+});
+
+// Detailed configuration - required MFA with email
+// Note: Email MFA requires SES configuration
+const auth = new Cognito(this, 'Auth', {
+  stack: { id: 'my-app', label: 'My App', tags: [] },
+  mfa: {
+    required: true,
+    mfaSecondFactor: {
+      sms: false,
+      otp: true,    // TOTP via authenticator app
+      email: true,  // Email OTP (requires SES configuration)
+    },
+  },
+  sesEmail: {
+    fromEmail: 'noreply@example.com',
+    verifiedDomain: 'example.com',
+  },
+});
+```
+
+**Important:** Email MFA requires SES (Simple Email Service) configuration. Messages are charged separately by Amazon SES. Ensure you have:
+- SES configured in your AWS account
+- A verified domain or email address
+- Sufficient SES sending limits for your use case
 
 ## Properties
 

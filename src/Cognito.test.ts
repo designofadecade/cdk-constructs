@@ -91,6 +91,28 @@ describe('Cognito', () => {
         });
     });
 
+    it('configures email MFA', () => {
+        const app = new App();
+        const stack = new Stack(app, 'TestStack', {
+            env: { region: 'us-east-1' },
+        });
+
+        new Cognito(stack, 'TestCognito', {
+            mfa: { required: true, mfaSecondFactor: { sms: false, otp: true, email: true } },
+            sesEmail: {
+                fromEmail: 'noreply@example.com',
+                verifiedDomain: 'example.com',
+            },
+            stack: { id: 'test', label: 'Test', tags: [] },
+        });
+
+        const template = Template.fromStack(stack);
+        template.hasResourceProperties('AWS::Cognito::UserPool', {
+            MfaConfiguration: 'ON',
+            EnabledMfas: ['SOFTWARE_TOKEN_MFA', 'EMAIL_OTP'],
+        });
+    });
+
     it('exposes user pool and client', () => {
         const app = new App();
         const stack = new Stack(app, 'TestStack');
