@@ -7,12 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-02-27
+
 ### Added
-- Comprehensive test coverage for all Lambda function handlers
-- Test suites for Cognito authentication handlers
+- Email MFA support in Cognito construct with SES integration
+- Styled HTML email templates for MFA authentication codes
+- Custom message handler support for `CustomMessage_Authentication` trigger
+- MFA email styling with professional design and security warnings
+- Environment variables for customizing MFA email subjects (`COGNITO_MFA_SUBJECT`)
+- Comprehensive test coverage for MFA email functionality
+- Documentation for email MFA configuration and custom email styling
 
 ### Changed
-- Improved TypeScript type safety in test files
+- Updated default MFA configuration to include email when SES is configured
+- Improved custom message handler to support both password reset and MFA emails
+- Enhanced Cognito documentation with MFA configuration examples
 
 ## [0.2.2] - 2026-02-24
 
