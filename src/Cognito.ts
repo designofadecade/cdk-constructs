@@ -1,5 +1,5 @@
 import { Construct } from 'constructs';
-import { Tags, CfnOutput } from 'aws-cdk-lib';
+import { Tags, CfnOutput, Duration } from 'aws-cdk-lib';
 import {
     UserPool,
     ManagedLoginVersion,
@@ -89,6 +89,112 @@ export interface SesEmailConfig {
 }
 
 /**
+ * Predefined password policy plans for different security requirements
+ */
+export enum PasswordPolicyPlan {
+    /**
+     * Basic password policy:
+     * - Minimum length: 8 characters
+     * - Requires lowercase letters
+     * - Requires numbers
+     */
+    BASIC = 'BASIC',
+
+    /**
+     * Standard password policy (recommended):
+     * - Minimum length: 10 characters
+     * - Requires uppercase letters
+     * - Requires lowercase letters
+     * - Requires numbers
+     * - Requires symbols
+     */
+    STANDARD = 'STANDARD',
+
+    /**
+     * Strong password policy:
+     * - Minimum length: 12 characters
+     * - Requires uppercase letters
+     * - Requires lowercase letters
+     * - Requires numbers
+     * - Requires symbols
+     * - Password history: remembers last 5 passwords
+     */
+    STRONG = 'STRONG',
+
+    /**
+     * Enterprise password policy:
+     * - Minimum length: 14 characters
+     * - Requires uppercase letters
+     * - Requires lowercase letters
+     * - Requires numbers
+     * - Requires symbols
+     * - Password history: remembers last 10 passwords
+     * - Temporary password validity: 3 days
+     */
+    ENTERPRISE = 'ENTERPRISE',
+
+    /**
+     * Custom password policy:
+     * - Use your own password policy settings
+     */
+    CUSTOM = 'CUSTOM',
+}
+
+/**
+ * Password policy configuration for Cognito User Pool
+ */
+export interface PasswordPolicyConfig {
+    /**
+     * Password policy plan to use
+     * @default PasswordPolicyPlan.STANDARD
+     */
+    readonly plan?: PasswordPolicyPlan;
+
+    /**
+     * Minimum password length (8-99 characters)
+     * @default 8 for BASIC, 10 for STANDARD, 12 for STRONG, 14 for ENTERPRISE
+     */
+    readonly minLength?: number;
+
+    /**
+     * Require at least one uppercase letter
+     * @default false for BASIC, true for STANDARD/STRONG/ENTERPRISE
+     */
+    readonly requireUppercase?: boolean;
+
+    /**
+     * Require at least one lowercase letter
+     * @default true for all plans
+     */
+    readonly requireLowercase?: boolean;
+
+    /**
+     * Require at least one number
+     * @default true for all plans
+     */
+    readonly requireNumbers?: boolean;
+
+    /**
+     * Require at least one symbol (special character)
+     * @default false for BASIC, true for STANDARD/STRONG/ENTERPRISE
+     */
+    readonly requireSymbols?: boolean;
+
+    /**
+     * How many days temporary passwords are valid
+     * @default 7 days (3 days for ENTERPRISE)
+     */
+    readonly tempPasswordValidityDays?: number;
+
+    /**
+     * How many previous passwords to remember (0-24)
+     * Prevents users from reusing recent passwords
+     * @default 0 for BASIC/STANDARD, 5 for STRONG, 10 for ENTERPRISE
+     */
+    readonly passwordHistorySize?: number;
+}
+
+/**
  * Branding configuration for a User Pool Client
  */
 export interface ClientBrandingConfig {
@@ -170,6 +276,12 @@ export interface CognitoProps {
      * Optional MFA second factor (deprecated - use mfa.mfaSecondFactor instead)
      */
     readonly mfaSecondFactor?: MfaSecondFactor;
+
+    /**
+     * Optional password policy configuration
+     * @default PasswordPolicyPlan.STANDARD
+     */
+    readonly passwordPolicy?: PasswordPolicyConfig;
 
     /**
      * Optional custom attributes for user profiles
@@ -278,6 +390,92 @@ export class Cognito extends Construct {
     constructor(scope: Construct, id: string, props: CognitoProps) {
         super(scope, id);
 
+        // Calculate password policy based on plan and custom settings
+        const getPasswordPolicy = (): {
+            minLength: number;
+            requireUppercase: boolean;
+            requireLowercase: boolean;
+            requireDigits: boolean;
+            requireSymbols: boolean;
+            tempPasswordValidity?: Duration;
+            passwordHistorySize?: number;
+        } => {
+            const plan = props.passwordPolicy?.plan ?? PasswordPolicyPlan.STANDARD;
+
+            // Define defaults for each plan
+            const planDefaults: Record<PasswordPolicyPlan, {
+                minLength: number;
+                requireUppercase: boolean;
+                requireLowercase: boolean;
+                requireDigits: boolean;
+                requireSymbols: boolean;
+                tempPasswordValidityDays: number;
+                passwordHistorySize: number;
+            }> = {
+                [PasswordPolicyPlan.BASIC]: {
+                    minLength: 8,
+                    requireUppercase: false,
+                    requireLowercase: true,
+                    requireDigits: true,
+                    requireSymbols: false,
+                    tempPasswordValidityDays: 7,
+                    passwordHistorySize: 0,
+                },
+                [PasswordPolicyPlan.STANDARD]: {
+                    minLength: 10,
+                    requireUppercase: true,
+                    requireLowercase: true,
+                    requireDigits: true,
+                    requireSymbols: true,
+                    tempPasswordValidityDays: 7,
+                    passwordHistorySize: 0,
+                },
+                [PasswordPolicyPlan.STRONG]: {
+                    minLength: 12,
+                    requireUppercase: true,
+                    requireLowercase: true,
+                    requireDigits: true,
+                    requireSymbols: true,
+                    tempPasswordValidityDays: 7,
+                    passwordHistorySize: 5,
+                },
+                [PasswordPolicyPlan.ENTERPRISE]: {
+                    minLength: 14,
+                    requireUppercase: true,
+                    requireLowercase: true,
+                    requireDigits: true,
+                    requireSymbols: true,
+                    tempPasswordValidityDays: 3,
+                    passwordHistorySize: 10,
+                },
+                [PasswordPolicyPlan.CUSTOM]: {
+                    minLength: 8,
+                    requireUppercase: false,
+                    requireLowercase: true,
+                    requireDigits: true,
+                    requireSymbols: false,
+                    tempPasswordValidityDays: 7,
+                    passwordHistorySize: 0,
+                },
+            };
+
+            const defaults = planDefaults[plan];
+            const config = props.passwordPolicy ?? {};
+
+            const tempPasswordValidityDays = config.tempPasswordValidityDays ?? defaults.tempPasswordValidityDays;
+            const passwordHistorySize = config.passwordHistorySize ?? defaults.passwordHistorySize;
+
+            return {
+                minLength: config.minLength ?? defaults.minLength,
+                requireUppercase: config.requireUppercase ?? defaults.requireUppercase,
+                requireLowercase: config.requireLowercase ?? defaults.requireLowercase,
+                requireDigits: config.requireNumbers ?? defaults.requireDigits,
+                requireSymbols: config.requireSymbols ?? defaults.requireSymbols,
+                tempPasswordValidity: Duration.days(tempPasswordValidityDays),
+                passwordHistorySize: passwordHistorySize > 0 ? passwordHistorySize : undefined,
+            };
+        };
+
         // Calculate MFA second factor configuration
         // Email MFA requires SES to be configured
         const getMfaSecondFactor = (): MfaSecondFactor | undefined => {
@@ -314,6 +512,7 @@ export class Cognito extends Construct {
             autoVerify: {
                 email: true,
             },
+            passwordPolicy: getPasswordPolicy(),
             ...(props.mfa != null
                 ? {
                     mfa: (typeof props.mfa === 'boolean' ? props.mfa : props.mfa.required) ? Mfa.REQUIRED : Mfa.OPTIONAL,

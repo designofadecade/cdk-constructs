@@ -37,7 +37,7 @@ export type { FunctionProps, AssetConfig, FunctionUrlConfig, FunctionUrlAuthType
 export { Secrets } from './Secrets.js';
 export type { SecretsProps } from './Secrets.js';
 
-export { Cognito } from './Cognito.js';
+export { Cognito, PasswordPolicyPlan } from './Cognito.js';
 export type {
     CognitoProps,
     MfaConfig,
@@ -46,6 +46,7 @@ export type {
     ClientBrandingConfig,
     UserPoolClientConfig,
     LoadedBranding,
+    PasswordPolicyConfig,
 } from './Cognito.js';
 
 export { HttpApi } from './HttpApi.js';

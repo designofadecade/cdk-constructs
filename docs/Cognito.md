@@ -5,6 +5,7 @@ CDK construct for creating Amazon Cognito User Pools with authentication flows.
 ## Features
 
 - Email-based authentication
+- Configurable password policies with predefined plans
 - Optional MFA with multiple methods:
   - TOTP (Time-based One-Time Password)
   - SMS (text message)
@@ -25,6 +26,69 @@ const auth = new Cognito(this, 'Auth', {
   stack: { id: 'my-app', tags: [] },
 });
 ```
+
+## Password Policy Configuration
+
+The construct supports multiple predefined password policy plans and custom configurations:
+
+```typescript
+import { Cognito, PasswordPolicyPlan } from '@designofadecade/cdk-constructs';
+
+// Use a predefined plan
+const auth = new Cognito(this, 'Auth', {
+  stack: { id: 'my-app', label: 'My App', tags: [] },
+  passwordPolicy: {
+    plan: PasswordPolicyPlan.STRONG, // BASIC, STANDARD, STRONG, or ENTERPRISE
+  },
+});
+
+// Customize specific settings on a plan
+const auth = new Cognito(this, 'Auth', {
+  stack: { id: 'my-app', label: 'My App', tags: [] },
+  passwordPolicy: {
+    plan: PasswordPolicyPlan.STANDARD,
+    minLength: 15,
+    passwordHistorySize: 5,
+  },
+});
+
+// Full custom configuration
+const auth = new Cognito(this, 'Auth', {
+  stack: { id: 'my-app', label: 'My App', tags: [] },
+  passwordPolicy: {
+    plan: PasswordPolicyPlan.CUSTOM,
+    minLength: 16,
+    requireUppercase: true,
+    requireLowercase: true,
+    requireNumbers: true,
+    requireSymbols: true,
+    tempPasswordValidityDays: 5,
+    passwordHistorySize: 8,
+  },
+});
+```
+
+### Password Policy Plans
+
+| Plan | Min Length | Uppercase | Lowercase | Numbers | Symbols | History | Temp Valid |
+|------|------------|-----------|-----------|---------|---------|---------|------------|
+| **BASIC** | 8 | ❌ | ✅ | ✅ | ❌ | 0 | 7 days |
+| **STANDARD** | 10 | ✅ | ✅ | ✅ | ✅ | 0 | 7 days |
+| **STRONG** | 12 | ✅ | ✅ | ✅ | ✅ | 5 | 7 days |
+| **ENTERPRISE** | 14 | ✅ | ✅ | ✅ | ✅ | 10 | 3 days |
+
+### Password Policy Options
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `plan` | `PasswordPolicyPlan` | `STANDARD` | Predefined password policy plan |
+| `minLength` | `number` | Varies by plan | Minimum password length (8-99) |
+| `requireUppercase` | `boolean` | Varies by plan | Require uppercase letters |
+| `requireLowercase` | `boolean` | `true` | Require lowercase letters |
+| `requireNumbers` | `boolean` | `true` | Require numbers |
+| `requireSymbols` | `boolean` | Varies by plan | Require special characters |
+| `tempPasswordValidityDays` | `number` | 7 (3 for ENTERPRISE) | Temporary password validity |
+| `passwordHistorySize` | `number` | 0-10 by plan | Number of passwords to remember |
 
 ## MFA Configuration
 
@@ -117,6 +181,7 @@ Both templates include:
 | `name` | `string` | Required | User pool name |
 | `stack` | `object` | Required | Stack ID and tags |
 | `mfa` | `boolean \| MfaConfig` | false | MFA configuration |
+| `passwordPolicy` | `PasswordPolicyConfig` | `STANDARD` | Password policy configuration |
 | `customMessageFunction` | `IFunction` | - | Custom message Lambda |
 | `preTokenGenerationFunction` | `IFunction` | - | Pre-token generation Lambda |
 

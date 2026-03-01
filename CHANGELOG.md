@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-03-01
+
+### Added
+- Password policy configuration with predefined plans (BASIC, STANDARD, STRONG, ENTERPRISE, CUSTOM)
+- Comprehensive password policy options: minLength, requireUppercase, requireLowercase, requireNumbers, requireSymbols
+- Password history support to prevent password reuse (0-24 previous passwords)
+- Temporary password validity configuration (tempPasswordValidityDays)
+- PasswordPolicyPlan enum for easy policy selection
+- PasswordPolicyConfig interface with full type safety
+- Full test coverage for all password policy plans and custom configurations
+- Updated Cognito documentation with password policy examples and configuration table
+
 ## [1.3.0] - 2026-02-27
 
 ### Added
