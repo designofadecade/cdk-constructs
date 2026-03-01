@@ -21,14 +21,6 @@ cd my-infrastructure
 # Initialize CDK project
 cdk init app --language typescript
 
-# Configure GitHub Packages
-echo "@designofadecade:registry=https://npm.pkg.github.com" > .npmrc
-
-# Authenticate with GitHub Packages
-npm login --registry=https://npm.pkg.github.com
-# Username: your-github-username
-# Password: your-github-personal-access-token (with read:packages permission)
-
 # Install the package
 npm install @designofadecade/cdk-constructs
 ```

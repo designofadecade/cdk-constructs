@@ -1,12 +1,22 @@
 # Source files (only publish compiled dist/)
 src/
 tsconfig.json
+tsconfig.build.json
 
-# Development files
+# Test files
 *.test.ts
 *.spec.ts
+*.test.js
+*.spec.js
+*.test.d.ts
+*.spec.d.ts
+tests/
+**/fixtures/
+
+# Development files
 .vscode/
 .idea/
+vitest.config.ts
 
 # Build artifacts
 *.tsbuildinfo

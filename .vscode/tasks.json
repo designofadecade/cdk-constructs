@@ -4,7 +4,7 @@
     {
       "label": "Version: Patch (Bug Fix)",
       "type": "shell",
-      "command": "npm test && npm run build && npm version patch && git push --follow-tags",
+      "command": "npm test && npm run build && npm version patch && git push --follow-tags && npm publish",
       "problemMatcher": [],
       "presentation": {
         "echo": true,
@@ -22,7 +22,7 @@
     {
       "label": "Version: Minor (New Feature)",
       "type": "shell",
-      "command": "npm test && npm run build && npm version minor && git push --follow-tags",
+      "command": "npm test && npm run build && npm version minor && git push --follow-tags && npm publish",
       "problemMatcher": [],
       "presentation": {
         "echo": true,
@@ -40,7 +40,7 @@
     {
       "label": "Version: Major (Breaking Change)",
       "type": "shell",
-      "command": "npm test && npm run build && npm version major && git push --follow-tags",
+      "command": "npm test && npm run build && npm version major && git push --follow-tags && npm publish",
       "problemMatcher": [],
       "presentation": {
         "echo": true,

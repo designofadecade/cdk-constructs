@@ -350,18 +350,23 @@ Closes #<issue_number>
 
 Only maintainers can create releases:
 
-1. Update version in `package.json`
+1. Update version in `package.json` (or use `npm version patch/minor/major`)
 2. Update `CHANGELOG.md`
-3. Create and push a git tag:
+3. Run tests and build:
+   ```bash
+   npm test
+   npm run build
+   ```
+4. Create and push a git tag:
    ```bash
    git tag -a v0.3.0 -m "Release v0.3.0"
    git push origin v0.3.0
    ```
-4. Publish to GitHub Packages:
+5. Publish to npm registry:
    ```bash
    npm publish
    ```
-5. Create GitHub release with release notes
+6. Create GitHub release with release notes
 
 ## Getting Help
 

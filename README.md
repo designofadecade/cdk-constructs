@@ -6,24 +6,11 @@ A comprehensive collection of opinionated AWS CDK constructs for rapid infrastru
 
 ## 📦 Installation
 
-This package is published to GitHub Packages. To install:
+Install the package from npm:
 
-1. **Create or update `.npmrc` in your project root:**
-   ```
-   @designofadecade:registry=https://npm.pkg.github.com
-   ```
-
-2. **Authenticate with GitHub Packages:**
-   ```bash
-   npm login --registry=https://npm.pkg.github.com
-   # Username: your-github-username
-   # Password: your-github-personal-access-token (with read:packages permission)
-   ```
-
-3. **Install the package:**
-   ```bash
-   npm install @designofadecade/cdk-constructs
-   ```
+```bash
+npm install @designofadecade/cdk-constructs
+```
 
 ### Peer Dependencies
 

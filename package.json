@@ -6,7 +6,9 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
-    "build": "tsc",
+    "clean": "rm -rf dist",
+    "build": "npm run clean && tsc -p tsconfig.build.json && npm run copy-assets",
+    "copy-assets": "cp src/assets/functions/cognito-custom-message/*.html dist/assets/functions/cognito-custom-message/",
     "watch": "tsc --watch",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -28,7 +30,7 @@
     "url": "https://github.com/designofadecade/cdk-constructs.git"
   },
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com"
+    "access": "public"
   },
   "engines": {
     "node": ">=20.0.0",
