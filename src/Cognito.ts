@@ -32,6 +32,7 @@ import { UserPoolDomainTarget } from 'aws-cdk-lib/aws-route53-targets';
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import type { Waf } from './Waf.js';
 
 /**
  * Account takeover action type
@@ -655,6 +656,12 @@ export interface CognitoProps {
      * @default Advanced security is disabled (OFF)
      */
     readonly threatProtection?: ThreatProtectionConfig;
+
+    /**
+     * Optional WAF Web ACL to associate with this User Pool
+     * Note: WAF must use REGIONAL scope for Cognito User Pools
+     */
+    readonly waf?: Waf;
 }
 
 /**
@@ -1086,6 +1093,11 @@ export class Cognito extends Construct {
             const cfnLogGroup = logGroup.node.defaultChild as logs.CfnLogGroup;
             logDeliveryConfig.addDependency(cfnLogGroup);
             logDeliveryConfig.addDependency(loggingPolicy);
+        }
+
+        // Associate WAF if provided
+        if (props.waf) {
+            props.waf.associateWithResource('Cognito', this.#userPool.userPoolArn);
         }
     }
 

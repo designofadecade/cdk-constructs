@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- WAF integration for Cognito User Pools
+  - Optional `waf` property in CognitoProps to attach WAF Web ACL
+  - Automatic association of REGIONAL WAF with User Pool ARN
+  - Network-level protection against DDoS, credential stuffing, and brute force attacks
+  - Support for combining WAF (network-level) with Advanced Security (application-level)
+  - Comprehensive documentation with security best practices
+  - Full test coverage maintained (153 tests passing)
+
 ## [1.5.0] - 2026-03-03
 
 ### Added

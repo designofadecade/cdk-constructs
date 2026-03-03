@@ -381,18 +381,179 @@ const auth = new Cognito(this, 'Auth', {
 4. **Feature Plan**: Advanced Security requires Cognito ESSENTIALS or PLUS plan
 5. **Email Templates**: The `{####}` placeholder is required in email bodies for verification codes
 
+## WAF Integration
+
+Protect your Cognito User Pool from web-based attacks by attaching an AWS WAF (Web Application Firewall) Web ACL.
+
+### Basic WAF Integration
+
+```typescript
+import { Cognito, Waf } from '@designofadecade/cdk-constructs';
+
+// Create a regional WAF (must be REGIONAL scope for Cognito)
+const waf = new Waf(this, 'CognitoWAF', {
+  scope: Waf.SCOPE_REGIONAL, // Required for Cognito
+  enableManagedRules: true,
+  rateLimit: {
+    limit: 2000,
+    priority: 1,
+  },
+  stack: { id: 'my-app', tags: [] },
+});
+
+// Create Cognito with WAF protection
+const auth = new Cognito(this, 'Auth', {
+  stack: { id: 'my-app', label: 'My App', tags: [] },
+  mfa: true,
+  waf: waf, // Attach WAF to User Pool
+});
+```
+
+### Advanced WAF Configuration
+
+Protect against common attacks and bot traffic:
+
+```typescript
+import { Cognito, Waf } from '@designofadecade/cdk-constructs';
+
+// Create WAF with comprehensive security rules
+const waf = new Waf(this, 'CognitoWAF', {
+  scope: Waf.SCOPE_REGIONAL,
+  enableManagedRules: true, // AWS Managed Rules (recommended)
+  
+  // Rate limiting to prevent brute force attacks
+  rateLimit: {
+    limit: 1000, // Max 1000 requests per 5 minutes from a single IP
+    priority: 1,
+  },
+  
+  // Geographic blocking
+  geoBlock: {
+    countryCodes: ['CN', 'RU', 'KP'], // Block specific countries
+    priority: 2,
+  },
+  
+  // IP allowlist for trusted sources
+  ipSets: [
+    {
+      name: 'AllowedIPs',
+      addresses: ['203.0.113.0/24'], // Your office/trusted IPs
+      action: 'ALLOW',
+      priority: 0, // Highest priority
+    },
+  ],
+  
+  stack: { id: 'my-app', tags: [] },
+});
+
+const auth = new Cognito(this, 'Auth', {
+  stack: { id: 'my-app', label: 'My App', tags: [] },
+  mfa: true,
+  waf: waf,
+});
+```
+
+### Combining WAF with Threat Protection
+
+For maximum security, combine WAF (network-level protection) with Cognito's Advanced Security (application-level protection):
+
+```typescript
+import { 
+  Cognito, 
+  Waf,
+  AdvancedSecurityMode,
+  AccountTakeoverActionType 
+} from '@designofadecade/cdk-constructs';
+
+// Network-level protection with WAF
+const waf = new Waf(this, 'CognitoWAF', {
+  scope: Waf.SCOPE_REGIONAL,
+  enableManagedRules: true,
+  rateLimit: {
+    limit: 1000,
+    priority: 1,
+  },
+  stack: { id: 'my-app', tags: [] },
+});
+
+// Application-level protection with Advanced Security
+const auth = new Cognito(this, 'Auth', {
+  stack: { id: 'my-app', label: 'My App', tags: [] },
+  mfa: {
+    required: false,
+    mfaSecondFactor: { sms: false, otp: true, email: true },
+  },
+  
+  // WAF for network-level protection
+  waf: waf,
+  
+  // Advanced Security for application-level protection
+  threatProtection: {
+    advancedSecurityMode: AdvancedSecurityMode.ENFORCED,
+    accountTakeoverRisk: {
+      lowAction: {
+        eventAction: AccountTakeoverActionType.NO_ACTION,
+        notify: true,
+      },
+      mediumAction: {
+        eventAction: AccountTakeoverActionType.MFA_IF_CONFIGURED,
+        notify: true,
+      },
+      highAction: {
+        eventAction: AccountTakeoverActionType.MFA_REQUIRED,
+        notify: true,
+      },
+    },
+    notifyConfiguration: {
+      sourceArn: 'arn:aws:ses:us-east-1:123456789012:identity/example.com',
+      from: 'security@example.com',
+    },
+  },
+});
+```
+
+### WAF Integration Notes
+
+1. **Regional Scope Required**: Cognito User Pools require WAF with `REGIONAL` scope (not `CLOUDFRONT`)
+2. **Automatic Association**: The WAF is automatically associated with the User Pool ARN
+3. **Rate Limiting**: Protects against credential stuffing and brute force attacks
+4. **AWS Managed Rules**: Includes protection against OWASP Top 10 vulnerabilities
+5. **Cost Considerations**: WAF incurs additional charges based on rules and requests
+6. **Multiple Layers**: WAF provides network-level protection; combine with Advanced Security for comprehensive protection
+
+### Security Best Practices
+
+**Use Both WAF and Threat Protection:**
+- **WAF** - Blocks malicious traffic before it reaches Cognito (DDoS, SQL injection, etc.)
+- **Threat Protection** - Analyzes user behavior and credentials (account takeover, compromised passwords)
+
+**Recommended Security Stack:**
+1. WAF with AWS Managed Rules + Rate Limiting
+2. Advanced Security in ENFORCED mode
+3. MFA enabled (optional or required based on risk)
+4. Strong password policy (STRONG or ENTERPRISE plans)
+
 ## Properties
 
 ### CognitoProps
 
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
-| `name` | `string` | Required | User pool name |
-| `stack` | `object` | Required | Stack ID and tags |
-| `mfa` | `boolean \| MfaConfig` | false | MFA configuration |
+| `stack` | `object` | Required | Stack ID, label, and tags |
+| `featurePlan` | `FeaturePlan` | `ESSENTIALS` | Cognito feature plan (LITE, ESSENTIALS, PLUS) |
+| `mfa` | `boolean \| MfaConfig` | `false` | MFA configuration |
 | `passwordPolicy` | `PasswordPolicyConfig` | `STANDARD` | Password policy configuration |
-| `customMessageFunction` | `IFunction` | - | Custom message Lambda |
-| `preTokenGenerationFunction` | `IFunction` | - | Pre-token generation Lambda |
+| `customAttributes` | `Record<string, ICustomAttribute>` | - | Custom user attributes |
+| `lambdaTriggers` | `UserPoolTriggers` | - | Lambda triggers for Cognito events |
+| `sesEmail` | `SesEmailConfig` | - | SES email configuration |
+| `customDomain` | `CustomDomainConfig` | - | Custom domain with certificate |
+| `clients` | `UserPoolClientConfig[]` | - | Multiple app clients configuration |
+| `readAttributes` | `ClientAttributes` | - | Readable user attributes |
+| `writeAttributes` | `ClientAttributes` | - | Writable user attributes |
+| `preventUserExistenceErrors` | `boolean` | `true` | Prevent revealing if user exists |
+| `logs` | `CognitoLogsConfig` | - | CloudWatch Logs configuration |
+| `threatProtection` | `ThreatProtectionConfig` | - | Advanced Security features |
+| `waf` | `Waf` | - | WAF Web ACL for network protection |
 
 ## Getters
 
@@ -415,3 +576,4 @@ const auth = new Cognito(this, 'Auth', {
 
 - [Function](./Function.md) - Lambda functions for Cognito triggers
 - [HttpApi](./HttpApi.md) - API with Cognito authorization
+- [Waf](./Waf.md) - Web Application Firewall for network security
