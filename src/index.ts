@@ -37,10 +37,10 @@ export type { FunctionProps, AssetConfig, FunctionUrlConfig, FunctionUrlAuthType
 export { Secrets } from './Secrets.js';
 export type { SecretsProps } from './Secrets.js';
 
-export { 
-    Cognito, 
-    PasswordPolicyPlan, 
-    LogEventSource, 
+export {
+    Cognito,
+    PasswordPolicyPlan,
+    LogEventSource,
     LogLevel,
     AccountTakeoverActionType,
     CompromisedCredentialsActionType,
