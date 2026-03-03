@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { App, Stack } from 'aws-cdk-lib';
+import { App, Stack, Duration, RemovalPolicy } from 'aws-cdk-lib';
 import { Template, Match } from 'aws-cdk-lib/assertions';
+import { RetentionDays } from 'aws-cdk-lib/aws-logs';
 import { Cognito, PasswordPolicyPlan } from '../src/Cognito.js';
 
 describe('Cognito', () => {
@@ -250,7 +251,7 @@ describe('Cognito', () => {
                 requireLowercase: true,
                 requireNumbers: true,
                 requireSymbols: true,
-                tempPasswordValidityDays: 5,
+                tempPasswordValidity: Duration.days(5),
                 passwordHistorySize: 8,
             },
         });
@@ -297,6 +298,206 @@ describe('Cognito', () => {
                     PasswordHistorySize: 3,
                 },
             },
+        });
+    });
+
+    it('creates log group when logging is enabled', () => {
+        const app = new App();
+        const stack = new Stack(app, 'TestStack');
+
+        new Cognito(stack, 'TestCognito', {
+            stack: { id: 'test', label: 'Test', tags: [] },
+            logs: {
+                enabled: true,
+            },
+        });
+
+        const template = Template.fromStack(stack);
+        template.resourceCountIs('AWS::Logs::LogGroup', 1);
+        template.hasResourceProperties('AWS::Logs::LogGroup', {
+            RetentionInDays: 30,
+        });
+    });
+
+    it('does not create log group when logging is disabled', () => {
+        const app = new App();
+        const stack = new Stack(app, 'TestStack');
+
+        new Cognito(stack, 'TestCognito', {
+            stack: { id: 'test', label: 'Test', tags: [] },
+            logs: {
+                enabled: false,
+            },
+        });
+
+        const template = Template.fromStack(stack);
+        template.resourceCountIs('AWS::Logs::LogGroup', 0);
+        template.resourceCountIs('AWS::Cognito::LogDeliveryConfiguration', 0);
+    });
+
+    it('does not create log group when logs config is not provided', () => {
+        const app = new App();
+        const stack = new Stack(app, 'TestStack');
+
+        new Cognito(stack, 'TestCognito', {
+            stack: { id: 'test', label: 'Test', tags: [] },
+        });
+
+        const template = Template.fromStack(stack);
+        template.resourceCountIs('AWS::Logs::LogGroup', 0);
+        template.resourceCountIs('AWS::Cognito::LogDeliveryConfiguration', 0);
+    });
+
+    it('configures custom log group name', () => {
+        const app = new App();
+        const stack = new Stack(app, 'TestStack');
+
+        new Cognito(stack, 'TestCognito', {
+            stack: { id: 'test', label: 'Test', tags: [] },
+            logs: {
+                enabled: true,
+                logGroupName: '/custom/cognito/logs',
+            },
+        });
+
+        const template = Template.fromStack(stack);
+        template.hasResourceProperties('AWS::Logs::LogGroup', {
+            LogGroupName: '/custom/cognito/logs',
+        });
+    });
+
+    it('configures custom retention policy', () => {
+        const app = new App();
+        const stack = new Stack(app, 'TestStack');
+
+        new Cognito(stack, 'TestCognito', {
+            stack: { id: 'test', label: 'Test', tags: [] },
+            logs: {
+                enabled: true,
+                retention: RetentionDays.ONE_WEEK,
+            },
+        });
+
+        const template = Template.fromStack(stack);
+        template.hasResourceProperties('AWS::Logs::LogGroup', {
+            RetentionInDays: 7,
+        });
+    });
+
+    it('configures custom removal policy', () => {
+        const app = new App();
+        const stack = new Stack(app, 'TestStack');
+
+        new Cognito(stack, 'TestCognito', {
+            stack: { id: 'test', label: 'Test', tags: [] },
+            logs: {
+                enabled: true,
+                removalPolicy: RemovalPolicy.RETAIN,
+            },
+        });
+
+        const template = Template.fromStack(stack);
+        const logGroups = template.findResources('AWS::Logs::LogGroup');
+        const logGroupKey = Object.keys(logGroups)[0];
+        expect(logGroups[logGroupKey].DeletionPolicy).toBe('Retain');
+    });
+
+    it('creates log delivery configuration with default settings', () => {
+        const app = new App();
+        const stack = new Stack(app, 'TestStack');
+
+        new Cognito(stack, 'TestCognito', {
+            stack: { id: 'test', label: 'Test', tags: [] },
+            logs: {
+                enabled: true,
+            },
+        });
+
+        const template = Template.fromStack(stack);
+        template.resourceCountIs('AWS::Cognito::LogDeliveryConfiguration', 1);
+        template.hasResourceProperties('AWS::Cognito::LogDeliveryConfiguration', {
+            LogConfigurations: [
+                {
+                    EventSource: 'userAuthEvents',
+                    LogLevel: 'INFO',
+                    CloudWatchLogsConfiguration: Match.objectLike({
+                        LogGroupArn: Match.anyValue(),
+                    }),
+                },
+            ],
+        });
+    });
+
+    it('configures custom event source and log level', () => {
+        const app = new App();
+        const stack = new Stack(app, 'TestStack');
+
+        new Cognito(stack, 'TestCognito', {
+            stack: { id: 'test', label: 'Test', tags: [] },
+            logs: {
+                enabled: true,
+                logConfigurations: [
+                    {
+                        eventSource: Cognito.LogEventSource.USER_NOTIFICATION,
+                        logLevel: Cognito.LogLevel.INFO,
+                    },
+                ],
+            },
+        });
+
+        const template = Template.fromStack(stack);
+        template.hasResourceProperties('AWS::Cognito::LogDeliveryConfiguration', {
+            LogConfigurations: [
+                {
+                    EventSource: 'userNotification',
+                    LogLevel: 'INFO',
+                    CloudWatchLogsConfiguration: Match.objectLike({
+                        LogGroupArn: Match.anyValue(),
+                    }),
+                },
+            ],
+        });
+    });
+
+    it('configures multiple log configurations', () => {
+        const app = new App();
+        const stack = new Stack(app, 'TestStack');
+
+        new Cognito(stack, 'TestCognito', {
+            stack: { id: 'test', label: 'Test', tags: [] },
+            logs: {
+                enabled: true,
+                logConfigurations: [
+                    {
+                        eventSource: Cognito.LogEventSource.USER_AUTH_EVENTS,
+                        logLevel: Cognito.LogLevel.INFO,
+                    },
+                    {
+                        eventSource: Cognito.LogEventSource.USER_NOTIFICATION,
+                        logLevel: Cognito.LogLevel.ERROR,
+                    },
+                ],
+            },
+        });
+
+        const template = Template.fromStack(stack);
+        template.hasResourceProperties('AWS::Cognito::LogDeliveryConfiguration', {
+            LogConfigurations: [
+                {
+                    EventSource: 'userAuthEvents',
+                    LogLevel: 'INFO',
+                    CloudWatchLogsConfiguration: Match.objectLike({
+                        LogGroupArn: Match.anyValue(),
+                    }),
+                },
+                {
+                    EventSource: 'userNotification',
+                    LogLevel: 'ERROR',
+                    CloudWatchLogsConfiguration: Match.objectLike({
+                        LogGroupArn: Match.anyValue(),
+                    }),
+                },
+            ],
         });
     });
 });

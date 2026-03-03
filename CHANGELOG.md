@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-03-03
+
+### Added
+- Advanced Security / Threat Protection for Cognito User Pools
+  - Three security modes: OFF (default), AUDIT, and ENFORCED
+  - Account takeover prevention with configurable risk-based actions (low, medium, high)
+  - Compromised credentials detection and blocking
+  - Email notifications for security events via SES
+  - Custom email templates for MFA, block, and no-action notifications
+- CloudWatch Logs integration for Cognito User Pools
+  - Configurable log delivery for user authentication and notification events
+  - Support for multiple event sources (USER_AUTH_EVENTS, USER_NOTIFICATION)
+  - Configurable log levels (INFO, ERROR)
+  - Custom log group names and retention policies
+  - Automatic IAM policy creation for log delivery
+- New exported types and enums:
+  - `AdvancedSecurityMode` - Security mode options (OFF, AUDIT, ENFORCED)
+  - `AccountTakeoverActionType` - Actions for account takeover scenarios
+  - `CompromisedCredentialsActionType` - Actions for compromised credentials
+  - `ThreatProtectionConfig` - Complete threat protection configuration
+  - `AccountTakeoverRiskConfiguration` - Risk level action configuration
+  - `AccountTakeoverActionConfig` - Individual action configuration
+  - `CompromisedCredentialsRiskConfiguration` - Compromised credentials settings
+  - `NotifyConfiguration` - Email notification configuration
+  - `CognitoLogsConfig` - CloudWatch Logs configuration
+  - `LogDeliveryConfig` - Individual log delivery configuration
+- Comprehensive documentation for threat protection features
+- Full test coverage for advanced security and logging features
+
+### Changed
+- Enhanced Cognito construct with enterprise-grade security features
+- Documentation updated with threat protection examples and best practices
+- Added security considerations and cost warnings for Advanced Security features
+
 ## [1.4.0] - 2026-03-01
 
 ### Added

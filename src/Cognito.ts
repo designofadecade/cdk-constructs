@@ -1,14 +1,18 @@
 import { Construct } from 'constructs';
-import { Tags, CfnOutput, Duration } from 'aws-cdk-lib';
+import { Tags, CfnOutput, Duration, RemovalPolicy } from 'aws-cdk-lib';
 import {
     UserPool,
     ManagedLoginVersion,
     CfnManagedLoginBranding,
+    CfnLogDeliveryConfiguration,
+    CfnUserPoolRiskConfigurationAttachment,
     StringAttribute,
     ClientAttributes,
     UserPoolEmail,
     UserPoolOperation,
     Mfa,
+    FeaturePlan,
+    AdvancedSecurityMode,
     type IUserPool,
     type UserPoolClient,
     type UserPoolDomain,
@@ -21,12 +25,217 @@ import {
     type StandardAttributes,
     type ICustomAttribute,
 } from 'aws-cdk-lib/aws-cognito';
+import * as logs from 'aws-cdk-lib/aws-logs';
 import type { ICertificate } from 'aws-cdk-lib/aws-certificatemanager';
 import { RecordTarget, ARecord, type IHostedZone } from 'aws-cdk-lib/aws-route53';
 import { UserPoolDomainTarget } from 'aws-cdk-lib/aws-route53-targets';
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+/**
+ * Account takeover action type
+ */
+export enum AccountTakeoverActionType {
+    /**
+     * Block the request
+     */
+    BLOCK = 'BLOCK',
+
+    /**
+     * Require MFA if configured for the user
+     */
+    MFA_IF_CONFIGURED = 'MFA_IF_CONFIGURED',
+
+    /**
+     * Require MFA
+     */
+    MFA_REQUIRED = 'MFA_REQUIRED',
+
+    /**
+     * Allow the request
+     */
+    NO_ACTION = 'NO_ACTION',
+}
+
+/**
+ * Compromised credentials action type
+ */
+export enum CompromisedCredentialsActionType {
+    /**
+     * Block the request
+     */
+    BLOCK = 'BLOCK',
+
+    /**
+     * Allow the request
+     */
+    NO_ACTION = 'NO_ACTION',
+}
+
+/**
+ * Account takeover action configuration
+ */
+export interface AccountTakeoverActionConfig {
+    /**
+     * The action to take
+     */
+    readonly eventAction: AccountTakeoverActionType;
+
+    /**
+     * Whether to send a notification email to the user
+     * @default false
+     */
+    readonly notify?: boolean;
+}
+
+/**
+ * Account takeover risk configuration for different risk levels
+ */
+export interface AccountTakeoverRiskConfiguration {
+    /**
+     * Action for low risk detected
+     * @default { eventAction: AccountTakeoverActionType.NO_ACTION, notify: true }
+     */
+    readonly lowAction?: AccountTakeoverActionConfig;
+
+    /**
+     * Action for medium risk detected
+     * @default { eventAction: AccountTakeoverActionType.MFA_IF_CONFIGURED, notify: true }
+     */
+    readonly mediumAction?: AccountTakeoverActionConfig;
+
+    /**
+     * Action for high risk detected
+     * @default { eventAction: AccountTakeoverActionType.MFA_REQUIRED, notify: true }
+     */
+    readonly highAction?: AccountTakeoverActionConfig;
+}
+
+/**
+ * Compromised credentials risk configuration
+ */
+export interface CompromisedCredentialsRiskConfiguration {
+    /**
+     * The action to take when compromised credentials are detected
+     * @default CompromisedCredentialsActionType.BLOCK
+     */
+    readonly eventAction?: CompromisedCredentialsActionType;
+}
+
+/**
+ * Notify configuration for risk detection email
+ */
+export interface NotifyConfiguration {
+    /**
+     * The source email address for notifications
+     * Must be a verified email address or domain in SES
+     */
+    readonly sourceArn: string;
+
+    /**
+     * The email address to send from
+     * @default Uses the email from sourceArn
+     */
+    readonly from?: string;
+
+    /**
+     * The reply-to email address
+     */
+    readonly replyTo?: string;
+
+    /**
+     * Email template for MFA notifications
+     */
+    readonly mfaEmail?: {
+        /**
+         * The email subject
+         */
+        readonly subject: string;
+
+        /**
+         * The HTML body of the email
+         */
+        readonly htmlBody?: string;
+
+        /**
+         * The text body of the email
+         */
+        readonly textBody?: string;
+    };
+
+    /**
+     * Email template for no action notifications
+     */
+    readonly noActionEmail?: {
+        /**
+         * The email subject
+         */
+        readonly subject: string;
+
+        /**
+         * The HTML body of the email
+         */
+        readonly htmlBody?: string;
+
+        /**
+         * The text body of the email
+         */
+        readonly textBody?: string;
+    };
+
+    /**
+     * Email template for block notifications
+     */
+    readonly blockEmail?: {
+        /**
+         * The email subject
+         */
+        readonly subject: string;
+
+        /**
+         * The HTML body of the email
+         */
+        readonly htmlBody?: string;
+
+        /**
+         * The text body of the email
+         */
+        readonly textBody?: string;
+    };
+}
+
+/**
+ * Threat Protection configuration for Cognito User Pool
+ */
+export interface ThreatProtectionConfig {
+    /**
+     * Advanced security mode
+     * - OFF: Advanced security is disabled
+     * - AUDIT: Advanced security is in audit mode (logs events but doesn't take action)
+     * - ENFORCED: Advanced security is enforced (takes action based on risk detection)
+     * @default AdvancedSecurityMode.OFF
+     */
+    readonly advancedSecurityMode?: AdvancedSecurityMode;
+
+    /**
+     * Account takeover risk configuration
+     * Configure actions for different risk levels (low, medium, high)
+     */
+    readonly accountTakeoverRisk?: AccountTakeoverRiskConfiguration;
+
+    /**
+     * Compromised credentials risk configuration
+     * Configure action when compromised credentials are detected
+     */
+    readonly compromisedCredentialsRisk?: CompromisedCredentialsRiskConfiguration;
+
+    /**
+     * Notification configuration for sending risk detection emails
+     * Required if any action has notify: true
+     */
+    readonly notifyConfiguration?: NotifyConfiguration;
+}
 
 /**
  * MFA configuration options
@@ -86,6 +295,92 @@ export interface SesEmailConfig {
      * The verified SES domain
      */
     readonly verifiedDomain: string;
+}
+
+/**
+ * Log event source types for Cognito
+ */
+export enum LogEventSource {
+    /**
+     * User notification events (e.g., MFA, email verification)
+     */
+    USER_NOTIFICATION = 'userNotification',
+
+    /**
+     * User authentication events (e.g., sign-in, sign-out)
+     */
+    USER_AUTH_EVENTS = 'userAuthEvents',
+}
+
+/**
+ * Log level for Cognito logs
+ */
+export enum LogLevel {
+    /**
+     * Log all events (including INFO level)
+     */
+    INFO = 'INFO',
+
+    /**
+     * Log only errors
+     */
+    ERROR = 'ERROR',
+}
+
+/**
+ * Configuration for a single log delivery
+ */
+export interface LogDeliveryConfig {
+    /**
+     * Event source to log
+     * @default LogEventSource.USER_AUTH_EVENTS
+     */
+    readonly eventSource?: LogEventSource;
+
+    /**
+     * Log level
+     * Note: USER_AUTH_EVENTS only supports INFO level
+     * USER_NOTIFICATION supports both INFO and ERROR
+     * @default LogLevel.INFO for USER_AUTH_EVENTS, LogLevel.ERROR for USER_NOTIFICATION
+     */
+    readonly logLevel?: LogLevel;
+}
+
+/**
+ * Logging configuration for Cognito
+ */
+export interface CognitoLogsConfig {
+    /**
+     * Enable logging for the User Pool
+     * @default false
+     */
+    readonly enabled?: boolean;
+
+    /**
+     * Custom log group name
+     * If not provided, defaults to /aws/cognito/${userPoolId}
+     */
+    readonly logGroupName?: string;
+
+    /**
+     * Log retention period
+     * @default logs.RetentionDays.ONE_MONTH
+     */
+    readonly retention?: logs.RetentionDays;
+
+    /**
+     * Removal policy for the log group
+     * @default RemovalPolicy.DESTROY
+     */
+    readonly removalPolicy?: RemovalPolicy;
+
+    /**
+     * Log delivery configurations
+     * Can specify multiple event sources with different log levels
+     * Note: USER_AUTH_EVENTS only supports INFO level
+     * @default [{ eventSource: LogEventSource.USER_AUTH_EVENTS, logLevel: LogLevel.INFO }]
+     */
+    readonly logConfigurations?: ReadonlyArray<LogDeliveryConfig>;
 }
 
 /**
@@ -169,6 +464,12 @@ export interface PasswordPolicyConfig {
     readonly requireLowercase?: boolean;
 
     /**
+     * Require at least one digit (number)
+     * @default true for all plans
+     */
+    readonly requireDigits?: boolean;
+
+    /**
      * Require at least one number
      * @default true for all plans
      */
@@ -181,10 +482,11 @@ export interface PasswordPolicyConfig {
     readonly requireSymbols?: boolean;
 
     /**
-     * How many days temporary passwords are valid
-     * @default 7 days (3 days for ENTERPRISE)
+     * How long temporary passwords are valid
+     * Must be specified in whole days only
+     * @default Duration.days(7) for most plans, Duration.days(3) for ENTERPRISE
      */
-    readonly tempPasswordValidityDays?: number;
+    readonly tempPasswordValidity?: Duration;
 
     /**
      * How many previous passwords to remember (0-24)
@@ -252,6 +554,13 @@ export interface UserPoolClientConfig {
      * Optional branding configuration
      */
     readonly branding?: ClientBrandingConfig;
+
+    /**
+     * Prevent user existence errors
+     * When enabled, Cognito returns generic error messages that don't reveal whether a user exists
+     * @default true
+     */
+    readonly preventUserExistenceErrors?: boolean;
 }
 
 /**
@@ -266,6 +575,12 @@ export interface CognitoProps {
         readonly label: string;
         readonly tags: ReadonlyArray<{ readonly key: string; readonly value: string }>;
     };
+
+    /**
+     * Optional feature plan for the User Pool
+     * @default FeaturePlan.ESSENTIALS
+     */
+    readonly featurePlan?: FeaturePlan;
 
     /**
      * Optional MFA configuration (boolean or detailed config)
@@ -317,6 +632,29 @@ export interface CognitoProps {
      * Optional write attributes configuration
      */
     readonly writeAttributes?: ClientAttributes;
+
+    /**
+     * Prevent user existence errors for default client
+     * When enabled, Cognito returns generic error messages that don't reveal whether a user exists
+     * @default true
+     */
+    readonly preventUserExistenceErrors?: boolean;
+
+    /**
+     * Optional logging configuration for the User Pool
+     * Enables CloudWatch Logs for Cognito events
+     */
+    readonly logs?: CognitoLogsConfig;
+
+    /**
+     * Optional threat protection configuration
+     * Enables Advanced Security features including:
+     * - Risk-based adaptive authentication
+     * - Account takeover prevention
+     * - Compromised credentials detection
+     * @default Advanced security is disabled (OFF)
+     */
+    readonly threatProtection?: ThreatProtectionConfig;
 }
 
 /**
@@ -349,10 +687,12 @@ export interface LoadedBranding {
  * 
  * Features:
  * - Email-based authentication
+ * - Feature plan selection (LITE, ESSENTIALS, PLUS)
  * - MFA support (optional or required) with SMS, TOTP, and Email options
  * - Custom domains with Route53 integration
  * - SES email integration
  * - Multiple app clients with per-client branding
+ * - Prevent user existence errors for enhanced security
  * - Custom attributes
  * - Lambda triggers
  * - Helper methods for common configurations
@@ -361,6 +701,7 @@ export interface LoadedBranding {
  * ```typescript
  * const userPool = new Cognito(this, 'UserPool', {
  *   stack: { id: 'my-app', label: 'My App', tags: [] },
+ *   featurePlan: Cognito.FeaturePlan.LITE,
  *   mfa: { required: true, mfaSecondFactor: { sms: false, otp: true, email: true } },
  *   customDomain: {
  *     domain: 'auth.example.com',
@@ -373,6 +714,7 @@ export interface LoadedBranding {
  *     callbackUrls: ['https://example.com/callback'],
  *     logoutUrls: ['https://example.com/logout'],
  *     branding: Cognito.LoadBrandingFromFile('./branding.json'),
+ *     preventUserExistenceErrors: true,
  *   }],
  * });
  * 
@@ -381,6 +723,36 @@ export interface LoadedBranding {
  * ```
  */
 export class Cognito extends Construct {
+    /**
+     * Cognito feature plans
+     */
+    static readonly FeaturePlan = FeaturePlan;
+
+    /**
+     * Log event source types for Cognito logging
+     */
+    static readonly LogEventSource = LogEventSource;
+
+    /**
+     * Log level options for Cognito logging
+     */
+    static readonly LogLevel = LogLevel;
+
+    /**
+     * Advanced security mode options
+     */
+    static readonly AdvancedSecurityMode = AdvancedSecurityMode;
+
+    /**
+     * Account takeover action types
+     */
+    static readonly AccountTakeoverActionType = AccountTakeoverActionType;
+
+    /**
+     * Compromised credentials action types
+     */
+    static readonly CompromisedCredentialsActionType = CompromisedCredentialsActionType;
+
     #userPool: UserPool;
     #userPoolDomain: UserPoolDomain;
     #domainName: string;
@@ -390,121 +762,9 @@ export class Cognito extends Construct {
     constructor(scope: Construct, id: string, props: CognitoProps) {
         super(scope, id);
 
-        // Calculate password policy based on plan and custom settings
-        const getPasswordPolicy = (): {
-            minLength: number;
-            requireUppercase: boolean;
-            requireLowercase: boolean;
-            requireDigits: boolean;
-            requireSymbols: boolean;
-            tempPasswordValidity?: Duration;
-            passwordHistorySize?: number;
-        } => {
-            const plan = props.passwordPolicy?.plan ?? PasswordPolicyPlan.STANDARD;
-
-            // Define defaults for each plan
-            const planDefaults: Record<PasswordPolicyPlan, {
-                minLength: number;
-                requireUppercase: boolean;
-                requireLowercase: boolean;
-                requireDigits: boolean;
-                requireSymbols: boolean;
-                tempPasswordValidityDays: number;
-                passwordHistorySize: number;
-            }> = {
-                [PasswordPolicyPlan.BASIC]: {
-                    minLength: 8,
-                    requireUppercase: false,
-                    requireLowercase: true,
-                    requireDigits: true,
-                    requireSymbols: false,
-                    tempPasswordValidityDays: 7,
-                    passwordHistorySize: 0,
-                },
-                [PasswordPolicyPlan.STANDARD]: {
-                    minLength: 10,
-                    requireUppercase: true,
-                    requireLowercase: true,
-                    requireDigits: true,
-                    requireSymbols: true,
-                    tempPasswordValidityDays: 7,
-                    passwordHistorySize: 0,
-                },
-                [PasswordPolicyPlan.STRONG]: {
-                    minLength: 12,
-                    requireUppercase: true,
-                    requireLowercase: true,
-                    requireDigits: true,
-                    requireSymbols: true,
-                    tempPasswordValidityDays: 7,
-                    passwordHistorySize: 5,
-                },
-                [PasswordPolicyPlan.ENTERPRISE]: {
-                    minLength: 14,
-                    requireUppercase: true,
-                    requireLowercase: true,
-                    requireDigits: true,
-                    requireSymbols: true,
-                    tempPasswordValidityDays: 3,
-                    passwordHistorySize: 10,
-                },
-                [PasswordPolicyPlan.CUSTOM]: {
-                    minLength: 8,
-                    requireUppercase: false,
-                    requireLowercase: true,
-                    requireDigits: true,
-                    requireSymbols: false,
-                    tempPasswordValidityDays: 7,
-                    passwordHistorySize: 0,
-                },
-            };
-
-            const defaults = planDefaults[plan];
-            const config = props.passwordPolicy ?? {};
-
-            const tempPasswordValidityDays = config.tempPasswordValidityDays ?? defaults.tempPasswordValidityDays;
-            const passwordHistorySize = config.passwordHistorySize ?? defaults.passwordHistorySize;
-
-            return {
-                minLength: config.minLength ?? defaults.minLength,
-                requireUppercase: config.requireUppercase ?? defaults.requireUppercase,
-                requireLowercase: config.requireLowercase ?? defaults.requireLowercase,
-                requireDigits: config.requireNumbers ?? defaults.requireDigits,
-                requireSymbols: config.requireSymbols ?? defaults.requireSymbols,
-                tempPasswordValidity: Duration.days(tempPasswordValidityDays),
-                passwordHistorySize: passwordHistorySize > 0 ? passwordHistorySize : undefined,
-            };
-        };
-
-        // Calculate MFA second factor configuration
-        // Email MFA requires SES to be configured
-        const getMfaSecondFactor = (): MfaSecondFactor | undefined => {
-            if (props.mfa == null) return undefined;
-
-            const explicitConfig = props.mfaSecondFactor ??
-                (typeof props.mfa === 'object' ? props.mfa.mfaSecondFactor : undefined);
-
-            if (explicitConfig) {
-                // If email MFA is requested but SES is not configured, remove email
-                if (explicitConfig.email && !props.sesEmail) {
-                    return {
-                        ...explicitConfig,
-                        email: false,
-                    };
-                }
-                return explicitConfig;
-            }
-
-            // Default configuration
-            return {
-                sms: false,
-                otp: true,
-                email: props.sesEmail != null, // Only enable email MFA if SES is configured
-            };
-        };
-
         this.#userPool = new UserPool(this, 'UserPool', {
             userPoolName: props.stack.label,
+            featurePlan: props.featurePlan ?? FeaturePlan.ESSENTIALS,
             signInCaseSensitive: false,
             signInAliases: {
                 email: true,
@@ -512,11 +772,11 @@ export class Cognito extends Construct {
             autoVerify: {
                 email: true,
             },
-            passwordPolicy: getPasswordPolicy(),
+            passwordPolicy: Cognito.getPasswordPolicy(props.passwordPolicy),
             ...(props.mfa != null
                 ? {
                     mfa: (typeof props.mfa === 'boolean' ? props.mfa : props.mfa.required) ? Mfa.REQUIRED : Mfa.OPTIONAL,
-                    mfaSecondFactor: getMfaSecondFactor(),
+                    mfaSecondFactor: Cognito.getMfaSecondFactor(props.mfa, props.mfaSecondFactor, props.sesEmail),
                 }
                 : {}),
             standardAttributes: {
@@ -535,6 +795,9 @@ export class Cognito extends Construct {
                     sesVerifiedDomain: props.sesEmail.verifiedDomain,
                 })
                 : undefined,
+            ...(props.threatProtection?.advancedSecurityMode && props.threatProtection.advancedSecurityMode !== AdvancedSecurityMode.OFF
+                ? { advancedSecurityMode: props.threatProtection.advancedSecurityMode }
+                : {}),
         });
 
         this.#userPoolDomain = this.#userPool.addDomain('UserPoolDomain', {
@@ -566,6 +829,7 @@ export class Cognito extends Construct {
                 },
                 readAttributes: props.readAttributes,
                 writeAttributes: props.writeAttributes,
+                preventUserExistenceErrors: props.preventUserExistenceErrors ?? true,
             });
 
             new CfnOutput(this, 'CognitoUserPoolClientID', {
@@ -576,7 +840,7 @@ export class Cognito extends Construct {
         }
 
         if (props.clients) {
-            props.clients.forEach(({ id, name, callbackUrls, logoutUrls, branding }) => {
+            props.clients.forEach(({ id, name, callbackUrls, logoutUrls, branding, preventUserExistenceErrors }) => {
                 const sanitizedName = name.replace(/[^a-zA-Z0-9]/g, '');
                 const userPoolClient = this.#userPool.addClient(`UserPoolMainClient${sanitizedName}`, {
                     userPoolClientName: name,
@@ -594,6 +858,7 @@ export class Cognito extends Construct {
                     },
                     readAttributes: props.readAttributes,
                     writeAttributes: props.writeAttributes,
+                    preventUserExistenceErrors: preventUserExistenceErrors ?? true,
                 });
 
                 const clientBranding = branding ?? {};
@@ -636,6 +901,93 @@ export class Cognito extends Construct {
             });
         }
 
+        // Configure threat protection if enabled
+        if (props.threatProtection?.advancedSecurityMode && props.threatProtection.advancedSecurityMode !== AdvancedSecurityMode.OFF) {
+            const riskConfigProps: any = {};
+
+            // Configure account takeover risk
+            if (props.threatProtection.accountTakeoverRisk) {
+                const actions: any = {};
+
+                if (props.threatProtection.accountTakeoverRisk.lowAction) {
+                    actions.lowAction = {
+                        eventAction: props.threatProtection.accountTakeoverRisk.lowAction.eventAction,
+                        notify: props.threatProtection.accountTakeoverRisk.lowAction.notify ?? false,
+                    };
+                }
+
+                if (props.threatProtection.accountTakeoverRisk.mediumAction) {
+                    actions.mediumAction = {
+                        eventAction: props.threatProtection.accountTakeoverRisk.mediumAction.eventAction,
+                        notify: props.threatProtection.accountTakeoverRisk.mediumAction.notify ?? false,
+                    };
+                }
+
+                if (props.threatProtection.accountTakeoverRisk.highAction) {
+                    actions.highAction = {
+                        eventAction: props.threatProtection.accountTakeoverRisk.highAction.eventAction,
+                        notify: props.threatProtection.accountTakeoverRisk.highAction.notify ?? false,
+                    };
+                }
+
+                const accountTakeoverRiskConfig: any = {
+                    actions,
+                };
+
+                // Add notify configuration if provided
+                if (props.threatProtection.notifyConfiguration) {
+                    accountTakeoverRiskConfig.notifyConfiguration = {
+                        sourceArn: props.threatProtection.notifyConfiguration.sourceArn,
+                        from: props.threatProtection.notifyConfiguration.from,
+                        replyTo: props.threatProtection.notifyConfiguration.replyTo,
+                    };
+
+                    if (props.threatProtection.notifyConfiguration.mfaEmail) {
+                        accountTakeoverRiskConfig.notifyConfiguration.mfaEmail = {
+                            subject: props.threatProtection.notifyConfiguration.mfaEmail.subject,
+                            htmlBody: props.threatProtection.notifyConfiguration.mfaEmail.htmlBody,
+                            textBody: props.threatProtection.notifyConfiguration.mfaEmail.textBody,
+                        };
+                    }
+
+                    if (props.threatProtection.notifyConfiguration.noActionEmail) {
+                        accountTakeoverRiskConfig.notifyConfiguration.noActionEmail = {
+                            subject: props.threatProtection.notifyConfiguration.noActionEmail.subject,
+                            htmlBody: props.threatProtection.notifyConfiguration.noActionEmail.htmlBody,
+                            textBody: props.threatProtection.notifyConfiguration.noActionEmail.textBody,
+                        };
+                    }
+
+                    if (props.threatProtection.notifyConfiguration.blockEmail) {
+                        accountTakeoverRiskConfig.notifyConfiguration.blockEmail = {
+                            subject: props.threatProtection.notifyConfiguration.blockEmail.subject,
+                            htmlBody: props.threatProtection.notifyConfiguration.blockEmail.htmlBody,
+                            textBody: props.threatProtection.notifyConfiguration.blockEmail.textBody,
+                        };
+                    }
+                }
+
+                riskConfigProps.accountTakeoverRiskConfiguration = accountTakeoverRiskConfig;
+            }
+
+            // Configure compromised credentials risk
+            if (props.threatProtection.compromisedCredentialsRisk) {
+                riskConfigProps.compromisedCredentialsRiskConfiguration = {
+                    eventFilter: ['SIGN_IN', 'PASSWORD_CHANGE', 'SIGN_UP'],
+                    actions: {
+                        eventAction: props.threatProtection.compromisedCredentialsRisk.eventAction ?? CompromisedCredentialsActionType.BLOCK,
+                    },
+                };
+            }
+
+            // Add risk configuration attachment
+            const riskConfig = new CfnUserPoolRiskConfigurationAttachment(this, 'RiskConfiguration', {
+                userPoolId: this.#userPool.userPoolId,
+                clientId: 'ALL', // Apply to all clients
+                ...riskConfigProps,
+            });
+        }
+
         props.stack.tags.forEach(({ key, value }) => {
             Tags.of(this.#userPool).add(key, value);
         });
@@ -651,6 +1003,90 @@ export class Cognito extends Construct {
             description: 'Cognito User Pool Domain Name',
             exportName: `${props.stack.id}-cognito-domain-name`,
         });
+
+        // Configure logging if enabled
+        if (props.logs?.enabled) {
+            const logGroupName = props.logs.logGroupName ?? `/aws/cognito/${this.#userPool.userPoolId}`;
+            const retention = props.logs.retention ?? logs.RetentionDays.ONE_MONTH;
+            const removalPolicy = props.logs.removalPolicy ?? RemovalPolicy.DESTROY;
+
+            // Create the log group
+            const logGroup = new logs.LogGroup(this, 'CognitoLogs', {
+                logGroupName,
+                retention,
+                removalPolicy,
+            });
+
+            // Build ARN manually without :* suffix (Cognito requires this format)
+            const logGroupArn = `arn:${this.#userPool.stack.partition}:logs:${this.#userPool.stack.region}:${this.#userPool.stack.account}:log-group:${logGroupName}`;
+
+            // Grant Cognito log delivery service permission to write to the log group
+            const loggingPolicy = new logs.CfnResourcePolicy(this, 'CognitoLoggingPolicy', {
+                // Best practice: Keep the name unique but simple
+                policyName: `CognitoLogPolicy-${this.#userPool.userPoolId}`,
+                policyDocument: JSON.stringify({
+                    Version: '2012-10-17',
+                    Statement: [
+                        {
+                            Sid: 'AllowCognitoLogDelivery',
+                            Effect: 'Allow',
+                            Principal: {
+                                // Cognito uses the internal delivery service principal
+                                Service: 'cognito-idp.amazonaws.com',
+                            },
+                            Action: [
+                                'logs:CreateLogStream',
+                                'logs:PutLogEvents',
+                                'logs:DescribeLogGroups',
+                                'logs:DescribeLogStreams'
+                            ],
+                            // CRITICAL: Ensure the ARN ends with ':*' to include all streams
+                            Resource: `${logGroup.logGroupArn}:*`,
+                            Condition: {
+                                StringEquals: {
+                                    'aws:SourceAccount': this.#userPool.stack.account,
+                                },
+                                ArnLike: {
+                                    // Extra security: Only allow your specific User Pool
+                                    'aws:SourceArn': this.#userPool.userPoolArn
+                                }
+                            },
+                        },
+                    ],
+                }),
+            });
+
+            // Prepare log configurations
+            const logConfigurations = (props.logs.logConfigurations ?? [
+                { eventSource: LogEventSource.USER_AUTH_EVENTS, logLevel: LogLevel.INFO },
+            ]).map((config) => {
+                // Default log level based on event source
+                // userAuthEvents only supports INFO, userNotification supports both INFO and ERROR
+                const defaultLogLevel =
+                    (config.eventSource ?? LogEventSource.USER_AUTH_EVENTS) === LogEventSource.USER_AUTH_EVENTS
+                        ? LogLevel.INFO
+                        : LogLevel.ERROR;
+
+                return {
+                    eventSource: config.eventSource ?? LogEventSource.USER_AUTH_EVENTS,
+                    logLevel: config.logLevel ?? defaultLogLevel,
+                    cloudWatchLogsConfiguration: {
+                        logGroupArn,
+                    },
+                };
+            });
+
+            // Enable log delivery - ensure it depends on the log group and policy
+            const logDeliveryConfig = new CfnLogDeliveryConfiguration(this, 'UserPoolLogDelivery', {
+                userPoolId: this.#userPool.userPoolId,
+                logConfigurations,
+            });
+
+            // Add explicit dependencies to ensure proper creation order
+            const cfnLogGroup = logGroup.node.defaultChild as logs.CfnLogGroup;
+            logDeliveryConfig.addDependency(cfnLogGroup);
+            logDeliveryConfig.addDependency(loggingPolicy);
+        }
     }
 
     /**
@@ -822,5 +1258,128 @@ export class Cognito extends Construct {
     static TokenRefreshFunctionEntryPath(): string {
         const __dirname = dirname(fileURLToPath(import.meta.url));
         return resolve(__dirname, './assets/functions/cognito-auth-token-refresh/handler.js');
+    }
+
+    /**
+     * Calculate password policy based on plan and custom settings
+     * @private
+     */
+    private static getPasswordPolicy(passwordPolicyConfig?: PasswordPolicyConfig): {
+        minLength: number;
+        requireUppercase: boolean;
+        requireLowercase: boolean;
+        requireDigits: boolean;
+        requireSymbols: boolean;
+        tempPasswordValidity?: Duration;
+        passwordHistorySize?: number;
+    } {
+        const plan = passwordPolicyConfig?.plan ?? PasswordPolicyPlan.STANDARD;
+
+        // Define defaults for each plan
+        const planDefaults: Record<PasswordPolicyPlan, {
+            minLength: number;
+            requireUppercase: boolean;
+            requireLowercase: boolean;
+            requireDigits: boolean;
+            requireSymbols: boolean;
+            tempPasswordValidityDays: number;
+            passwordHistorySize: number;
+        }> = {
+            [PasswordPolicyPlan.BASIC]: {
+                minLength: 8,
+                requireUppercase: false,
+                requireLowercase: true,
+                requireDigits: true,
+                requireSymbols: false,
+                tempPasswordValidityDays: 7,
+                passwordHistorySize: 0,
+            },
+            [PasswordPolicyPlan.STANDARD]: {
+                minLength: 10,
+                requireUppercase: true,
+                requireLowercase: true,
+                requireDigits: true,
+                requireSymbols: true,
+                tempPasswordValidityDays: 7,
+                passwordHistorySize: 0,
+            },
+            [PasswordPolicyPlan.STRONG]: {
+                minLength: 12,
+                requireUppercase: true,
+                requireLowercase: true,
+                requireDigits: true,
+                requireSymbols: true,
+                tempPasswordValidityDays: 7,
+                passwordHistorySize: 5,
+            },
+            [PasswordPolicyPlan.ENTERPRISE]: {
+                minLength: 14,
+                requireUppercase: true,
+                requireLowercase: true,
+                requireDigits: true,
+                requireSymbols: true,
+                tempPasswordValidityDays: 3,
+                passwordHistorySize: 10,
+            },
+            [PasswordPolicyPlan.CUSTOM]: {
+                minLength: 8,
+                requireUppercase: false,
+                requireLowercase: true,
+                requireDigits: true,
+                requireSymbols: false,
+                tempPasswordValidityDays: 7,
+                passwordHistorySize: 0,
+            },
+        };
+
+        const defaults = planDefaults[plan];
+        const config = passwordPolicyConfig ?? {};
+
+        const tempPasswordValidity = config.tempPasswordValidity ?? Duration.days(defaults.tempPasswordValidityDays);
+        const passwordHistorySize = config.passwordHistorySize ?? defaults.passwordHistorySize;
+
+        return {
+            minLength: config.minLength ?? defaults.minLength,
+            requireUppercase: config.requireUppercase ?? defaults.requireUppercase,
+            requireLowercase: config.requireLowercase ?? defaults.requireLowercase,
+            requireDigits: config.requireNumbers ?? defaults.requireDigits,
+            requireSymbols: config.requireSymbols ?? defaults.requireSymbols,
+            tempPasswordValidity,
+            passwordHistorySize: passwordHistorySize > 0 ? passwordHistorySize : undefined,
+        };
+    }
+
+    /**
+     * Calculate MFA second factor configuration
+     * Email MFA requires SES to be configured
+     * @private
+     */
+    private static getMfaSecondFactor(
+        mfa?: boolean | MfaConfig,
+        mfaSecondFactor?: MfaSecondFactor,
+        sesEmail?: SesEmailConfig,
+    ): MfaSecondFactor | undefined {
+        if (mfa == null) return undefined;
+
+        const explicitConfig = mfaSecondFactor ??
+            (typeof mfa === 'object' ? mfa.mfaSecondFactor : undefined);
+
+        if (explicitConfig) {
+            // If email MFA is requested but SES is not configured, remove email
+            if (explicitConfig.email && !sesEmail) {
+                return {
+                    ...explicitConfig,
+                    email: false,
+                };
+            }
+            return explicitConfig;
+        }
+
+        // Default configuration
+        return {
+            sms: false,
+            otp: true,
+            email: sesEmail != null, // Only enable email MFA if SES is configured
+        };
     }
 }

@@ -172,6 +172,215 @@ Both templates include:
 - Professional styling matching your brand
 - Auto-updating copyright year
 
+## Threat Protection (Advanced Security)
+
+AWS Cognito Advanced Security features provide risk-based adaptive authentication, account takeover prevention, and compromised credentials detection.
+
+### Advanced Security Modes
+
+- **OFF** - Advanced security is completely disabled (default)
+- **AUDIT** - Logs security events but doesn't take action (useful for testing)
+- **ENFORCED** - Takes action based on risk detection
+
+### Basic Configuration
+
+```typescript
+import { Cognito, AdvancedSecurityMode } from '@designofadecade/cdk-constructs';
+
+const auth = new Cognito(this, 'Auth', {
+  stack: { id: 'my-app', label: 'My App', tags: [] },
+  threatProtection: {
+    advancedSecurityMode: AdvancedSecurityMode.ENFORCED,
+  },
+});
+```
+
+### Account Takeover Prevention
+
+Configure different actions for different risk levels:
+
+```typescript
+import { 
+  Cognito, 
+  AdvancedSecurityMode,
+  AccountTakeoverActionType 
+} from '@designofadecade/cdk-constructs';
+
+const auth = new Cognito(this, 'Auth', {
+  stack: { id: 'my-app', label: 'My App', tags: [] },
+  threatProtection: {
+    advancedSecurityMode: AdvancedSecurityMode.ENFORCED,
+    accountTakeoverRisk: {
+      lowAction: {
+        eventAction: AccountTakeoverActionType.NO_ACTION,
+        notify: true, // Send notification email
+      },
+      mediumAction: {
+        eventAction: AccountTakeoverActionType.MFA_IF_CONFIGURED,
+        notify: true,
+      },
+      highAction: {
+        eventAction: AccountTakeoverActionType.MFA_REQUIRED,
+        notify: true,
+      },
+    },
+    // SES email configuration for notifications
+    notifyConfiguration: {
+      sourceArn: 'arn:aws:ses:us-east-1:123456789012:identity/example.com',
+      from: 'security@example.com',
+      replyTo: 'support@example.com',
+      // Custom email templates
+      mfaEmail: {
+        subject: 'MFA Required for Security',
+        htmlBody: '<p>We detected unusual activity. Please verify: {####}</p>',
+        textBody: 'We detected unusual activity. Please verify: {####}',
+      },
+      blockEmail: {
+        subject: 'Login Blocked for Security',
+        htmlBody: '<p>We blocked a suspicious login attempt to your account.</p>',
+        textBody: 'We blocked a suspicious login attempt to your account.',
+      },
+      noActionEmail: {
+        subject: 'Security Alert',
+        htmlBody: '<p>We detected a login from a new device or location.</p>',
+        textBody: 'We detected a login from a new device or location.',
+      },
+    },
+  },
+});
+```
+
+### Compromised Credentials Detection
+
+Automatically detect and block compromised credentials:
+
+```typescript
+import { 
+  Cognito, 
+  AdvancedSecurityMode,
+  CompromisedCredentialsActionType 
+} from '@designofadecade/cdk-constructs';
+
+const auth = new Cognito(this, 'Auth', {
+  stack: { id: 'my-app', label: 'My App', tags: [] },
+  threatProtection: {
+    advancedSecurityMode: AdvancedSecurityMode.ENFORCED,
+    compromisedCredentialsRisk: {
+      eventAction: CompromisedCredentialsActionType.BLOCK,
+    },
+  },
+});
+```
+
+### Complete Threat Protection Example
+
+```typescript
+import { 
+  Cognito, 
+  AdvancedSecurityMode,
+  AccountTakeoverActionType,
+  CompromisedCredentialsActionType 
+} from '@designofadecade/cdk-constructs';
+
+const auth = new Cognito(this, 'Auth', {
+  stack: { id: 'my-app', label: 'My App', tags: [] },
+  mfa: {
+    required: false, // MFA can be triggered by risk level
+    mfaSecondFactor: {
+      sms: false,
+      otp: true,
+      email: true,
+    },
+  },
+  sesEmail: {
+    fromEmail: 'noreply@example.com',
+    verifiedDomain: 'example.com',
+  },
+  threatProtection: {
+    advancedSecurityMode: AdvancedSecurityMode.ENFORCED,
+    // Account takeover prevention
+    accountTakeoverRisk: {
+      lowAction: {
+        eventAction: AccountTakeoverActionType.NO_ACTION,
+        notify: true,
+      },
+      mediumAction: {
+        eventAction: AccountTakeoverActionType.MFA_IF_CONFIGURED,
+        notify: true,
+      },
+      highAction: {
+        eventAction: AccountTakeoverActionType.MFA_REQUIRED,
+        notify: true,
+      },
+    },
+    // Compromised credentials detection
+    compromisedCredentialsRisk: {
+      eventAction: CompromisedCredentialsActionType.BLOCK,
+    },
+    // Email notification configuration
+    notifyConfiguration: {
+      sourceArn: 'arn:aws:ses:us-east-1:123456789012:identity/example.com',
+      from: 'security@example.com',
+      replyTo: 'support@example.com',
+      mfaEmail: {
+        subject: 'Security Verification Required',
+        htmlBody: `
+          <h2>Additional Verification Required</h2>
+          <p>We detected unusual activity on your account.</p>
+          <p>Please enter this code: <strong>{####}</strong></p>
+          <p>If this wasn't you, please contact support immediately.</p>
+        `,
+        textBody: 'We detected unusual activity. Verification code: {####}',
+      },
+      blockEmail: {
+        subject: 'Suspicious Login Blocked',
+        htmlBody: `
+          <h2>Login Attempt Blocked</h2>
+          <p>We blocked a suspicious login attempt to your account.</p>
+          <p>If this wasn't you, your account is safe. If this was you, please try again.</p>
+        `,
+        textBody: 'We blocked a suspicious login attempt to your account.',
+      },
+      noActionEmail: {
+        subject: 'New Login Detected',
+        htmlBody: `
+          <h2>New Login Detected</h2>
+          <p>We detected a login from a new device or location.</p>
+          <p>If this wasn't you, please secure your account immediately.</p>
+        `,
+        textBody: 'We detected a login from a new device or location.',
+      },
+    },
+  },
+});
+```
+
+### Threat Protection Options
+
+#### Account Takeover Actions
+
+| Action Type | Description |
+|------------|-------------|
+| `BLOCK` | Block the sign-in attempt |
+| `MFA_IF_CONFIGURED` | Require MFA if the user has it configured |
+| `MFA_REQUIRED` | Always require MFA regardless of user configuration |
+| `NO_ACTION` | Allow the sign-in but log the event |
+
+#### Compromised Credentials Actions
+
+| Action Type | Description |
+|------------|-------------|
+| `BLOCK` | Block sign-ins with compromised credentials |
+| `NO_ACTION` | Allow sign-ins but log the event |
+
+### Important Notes
+
+1. **Costs**: Advanced Security features incur additional charges from AWS
+2. **SES Required**: Email notifications require a verified SES domain/email
+3. **Testing**: Use `AUDIT` mode first to test without affecting users
+4. **Feature Plan**: Advanced Security requires Cognito ESSENTIALS or PLUS plan
+5. **Email Templates**: The `{####}` placeholder is required in email bodies for verification codes
+
 ## Properties
 
 ### CognitoProps
