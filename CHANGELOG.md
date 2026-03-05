@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Monitoring construct** with comprehensive CloudWatch and Slack integration
+  - `createLogGroup()` - Create CloudWatch Log Groups with configurable retention
+  - `createMetricFilter()` - Extract metrics from log patterns (ERROR, Exception, etc.)
+  - `createAlarm()` - Create CloudWatch alarms with configurable thresholds
+  - `createSnsTopic()` - Create SNS topics for alarm notifications
+  - `createSlackNotifier()` - Lambda function to send formatted messages to Slack
+  - `createErrorMonitoring()` - Complete one-method setup for log → filter → alarm → SNS → Slack pipeline
+  - Formatted Slack messages with color coding, alarm details, and timestamps
+  - Sensible defaults: 7-day log retention, 5-minute evaluation periods
+  - Full documentation with examples and best practices
+  - Comprehensive test coverage (13 tests passing)
+
 ## [1.7.0] - 2026-03-03
 
 ### Added

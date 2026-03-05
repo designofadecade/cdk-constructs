@@ -83,3 +83,13 @@ export type { BastionHostProps } from './BastionHost.js';
 
 export { Server } from './Server.js';
 export type { ServerProps, ProjectConfig as ServerProjectConfig, DomainConfig as ServerDomainConfig, VolumeConfig } from './Server.js';
+
+export { Monitoring } from './Monitoring.js';
+export type {
+    LogGroupConfig,
+    MetricFilterConfig,
+    AlarmConfig,
+    SnsTopicConfig,
+    SlackNotificationConfig,
+    MonitoringSetup
+} from './Monitoring.js';
