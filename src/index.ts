@@ -86,10 +86,9 @@ export type { ServerProps, ProjectConfig as ServerProjectConfig, DomainConfig as
 
 export { Monitoring } from './Monitoring.js';
 export type {
-    LogGroupConfig,
-    MetricFilterConfig,
+    MonitoringProps,
+    NotificationHandler,
     AlarmConfig,
     SnsTopicConfig,
-    SlackNotificationConfig,
-    MonitoringSetup
+    LogGroupConfig,
 } from './Monitoring.js';

@@ -8,17 +8,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Enhanced Monitoring construct** with real-time error log notifications
+  - `monitorErrors()` - Real-time JSON error log monitoring with CloudWatch subscription filters
+  - Automatic JSON log parsing for structured error data
+  - Shared Lambda function architecture for efficient resource usage
+  - Multiple error level support (ERROR, FATAL, CRITICAL)
+  - Custom field name support for flexible log formats
+  - Direct integration with SNS topic for unified notification routing
+  - ES module support for all monitoring Lambda functions
 - **Monitoring construct** with comprehensive CloudWatch and Slack integration
   - `createLogGroup()` - Create CloudWatch Log Groups with configurable retention
-  - `createMetricFilter()` - Extract metrics from log patterns (ERROR, Exception, etc.)
-  - `createAlarm()` - Create CloudWatch alarms with configurable thresholds
-  - `createSnsTopic()` - Create SNS topics for alarm notifications
-  - `createSlackNotifier()` - Lambda function to send formatted messages to Slack
-  - `createErrorMonitoring()` - Complete one-method setup for log → filter → alarm → SNS → Slack pipeline
-  - Formatted Slack messages with color coding, alarm details, and timestamps
+  - `addLogAlarm()` - Create metric filters and alarms for log patterns
+  - `addAlarm()` - Create CloudWatch alarms with configurable thresholds
+  - Notification handlers for Slack, Microsoft Teams, and Google Chat
+  - `slackNotifier()`, `teamsNotifier()`, `googleChatNotifier()` - Factory methods for notification configs
+  - Formatted notification messages with color coding and detailed context
   - Sensible defaults: 7-day log retention, 5-minute evaluation periods
   - Full documentation with examples and best practices
-  - Comprehensive test coverage (13 tests passing)
+  - Comprehensive test coverage
+
+### Changed
+- All monitoring Lambda functions now use ES modules (`"type": "module"`)
+- Removed all console.log statements from monitoring functions for cleaner CloudWatch logs
+- Build script now automatically copies package.json files for all monitoring functions
+- Renamed `addJsonErrorLogSubscription()` to `monitorErrors()` for better API clarity
+
+### Fixed
+- Lambda runtime "Cannot use import statement outside a module" errors
+- TypeScript compilation errors with aws-jwt-verify package
+- Updated log-error-notifier tests to match SNS-based implementation
+- Removed outdated unit tests for deprecated static methods
 
 ## [1.7.0] - 2026-03-03
 

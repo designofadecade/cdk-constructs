@@ -8,7 +8,7 @@
   "scripts": {
     "clean": "rm -rf dist",
     "build": "npm run clean && tsc -p tsconfig.build.json && npm run copy-assets",
-    "copy-assets": "cp src/assets/functions/cognito-custom-message/*.html dist/assets/functions/cognito-custom-message/",
+    "copy-assets": "cp src/assets/functions/cognito-custom-message/*.html dist/assets/functions/cognito-custom-message/ && find src/assets/functions/monitoring -name 'package.json' -exec sh -c 'cp \"$1\" \"dist/assets/functions/monitoring/$(basename $(dirname \"$1\"))/\"' _ {} \\;",
     "watch": "tsc --watch",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -41,11 +41,13 @@
     "constructs": "^10.0.0"
   },
   "devDependencies": {
-    "@types/aws-lambda": "^8.10.160",
-    "@types/node": "^25.3.0",
+    "@aws-sdk/client-sns": "^3.1003.0",
+    "@types/aws-lambda": "^8.10.145",
+    "@types/node": "^22.10.5",
     "@vitest/coverage-v8": "^4.0.18",
     "@vitest/ui": "^4.0.18",
     "aws-cdk-lib": "^2.240.0",
+    "aws-sdk-client-mock": "^4.1.0",
     "constructs": "^10.3.0",
     "typescript": "^5.3.3",
     "vitest": "^4.0.18"

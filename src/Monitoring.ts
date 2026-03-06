@@ -1,62 +1,46 @@
 import { Construct } from 'constructs';
-import { RemovalPolicy, Duration } from 'aws-cdk-lib';
-import { LogGroup, RetentionDays, type ILogGroup, MetricFilter, FilterPattern } from 'aws-cdk-lib/aws-logs';
+import { Duration, Stack, RemovalPolicy } from 'aws-cdk-lib';
+import { type ILogGroup, LogGroup, MetricFilter, FilterPattern, RetentionDays, SubscriptionFilter } from 'aws-cdk-lib/aws-logs';
+import { LambdaDestination } from 'aws-cdk-lib/aws-logs-destinations';
 import { Topic, type ITopic } from 'aws-cdk-lib/aws-sns';
 import { LambdaSubscription } from 'aws-cdk-lib/aws-sns-subscriptions';
-import { Alarm, ComparisonOperator, TreatMissingData, type IAlarm } from 'aws-cdk-lib/aws-cloudwatch';
+import { Alarm, ComparisonOperator, TreatMissingData } from 'aws-cdk-lib/aws-cloudwatch';
 import { SnsAction } from 'aws-cdk-lib/aws-cloudwatch-actions';
 import { Function as LambdaFunction, Runtime, Code, type IFunction } from 'aws-cdk-lib/aws-lambda';
-import { PolicyStatement, Effect } from 'aws-cdk-lib/aws-iam';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 /**
- * Configuration options for CloudWatch Log Group
+ * Notification handler configuration
  */
-export interface LogGroupConfig {
-    /**
-     * The name of the log group (default: auto-generated)
-     */
-    readonly logGroupName?: string;
-
-    /**
-     * How long to retain logs (default: 7 days)
-     */
-    readonly retention?: RetentionDays;
-
-    /**
-     * Removal policy for the log group (default: DESTROY)
-     */
-    readonly removalPolicy?: RemovalPolicy;
+export interface NotificationHandler {
+    readonly type: 'slack' | 'teams' | 'googlechat';
+    readonly webhookUrl: string;
+    readonly channel?: string;
+    readonly messagePrefix?: string;
 }
 
 /**
- * Configuration for metric filter
+ * Configuration options for the Monitoring construct
  */
-export interface MetricFilterConfig {
+export interface MonitoringProps {
     /**
-     * The log group to create the filter on
+     * The stack this monitoring is for (optional)
      */
-    readonly logGroup: ILogGroup;
+    readonly stack?: Stack;
 
     /**
-     * The filter pattern to match log events
-     * Common patterns: ERROR, Exception, "task timed out"
+     * SNS topic configuration
      */
-    readonly filterPattern: string;
+    readonly topic?: SnsTopicConfig;
 
     /**
-     * The name of the metric (default: auto-generated)
+     * Notification handlers to add to the topic
      */
-    readonly metricName?: string;
-
-    /**
-     * The namespace for the metric (default: 'CustomMetrics')
-     */
-    readonly metricNamespace?: string;
-
-    /**
-     * The value to emit when the pattern matches (default: 1)
-     */
-    readonly metricValue?: string;
+    readonly notifications?: NotificationHandler[];
 }
 
 /**
@@ -115,118 +99,162 @@ export interface SnsTopicConfig {
 }
 
 /**
- * Configuration for Slack notification Lambda
+ * Configuration for CloudWatch Log Group
  */
-export interface SlackNotificationConfig {
+export interface LogGroupConfig {
     /**
-     * The Slack webhook URL (should be stored in environment variable or Secrets Manager)
+     * The name of the log group (default: auto-generated)
      */
-    readonly slackWebhookUrl: string;
+    readonly logGroupName?: string;
 
     /**
-     * Optional Slack channel (default: from webhook)
+     * The retention period for logs (default: 7 days)
      */
-    readonly slackChannel?: string;
+    readonly retention?: RetentionDays;
 
     /**
-     * Optional custom message prefix
+     * The removal policy (default: DESTROY)
      */
-    readonly messagePrefix?: string;
-}
-
-/**
- * Result of creating a complete monitoring setup
- */
-export interface MonitoringSetup {
-    readonly logGroup: ILogGroup;
-    readonly metricFilter: MetricFilter;
-    readonly alarm: Alarm;
-    readonly snsTopic: ITopic;
-    readonly slackFunction: IFunction;
+    readonly removalPolicy?: RemovalPolicy;
 }
 
 export class Monitoring extends Construct {
+    /**
+     * The SNS topic for this monitoring setup
+     */
+    public readonly topic: ITopic;
 
-    constructor(scope: Construct, id: string) {
+    /**
+     * List of notification functions
+     */
+    public readonly notificationFunctions: IFunction[] = [];
+
+    /**
+     * List of alarms
+     */
+    public readonly alarms: Alarm[] = [];
+
+    /**
+     * Shared Lambda function for processing log errors
+     * Created lazily on first use
+     */
+    private logErrorFunction?: IFunction;
+
+    constructor(scope: Construct, id: string, props?: MonitoringProps) {
         super(scope, id);
-    }
 
-    /**
-     * Creates a CloudWatch Log Group with sensible defaults
-     * 
-     * @param scope - The construct scope
-     * @param id - The construct id
-     * @param config - Optional configuration for the log group
-     * @returns The created CloudWatch Log Group
-     * 
-     * @example
-     * ```typescript
-     * const logGroup = Monitoring.createLogGroup(this, 'MyAppLogs', {
-     *   logGroupName: '/aws/lambda/my-function',
-     *   retention: RetentionDays.ONE_WEEK
-     * });
-     * ```
-     */
-    static createLogGroup(scope: Construct, id: string, config?: LogGroupConfig): ILogGroup {
-        const logGroup = new LogGroup(scope, id, {
-            logGroupName: config?.logGroupName,
-            retention: config?.retention ?? RetentionDays.ONE_WEEK,
-            removalPolicy: config?.removalPolicy ?? RemovalPolicy.DESTROY,
+        // Create SNS topic
+        this.topic = new Topic(this, 'Topic', {
+            topicName: props?.topic?.topicName,
+            displayName: props?.topic?.displayName,
         });
 
-        return logGroup;
+        // Add notification handlers
+        if (props?.notifications) {
+            for (const notification of props.notifications) {
+                const handler = this.createNotificationFunction(notification);
+                this.topic.addSubscription(new LambdaSubscription(handler));
+                this.notificationFunctions.push(handler);
+            }
+        }
     }
 
     /**
-     * Creates a metric filter to extract metrics from log patterns
-     * 
-     * @param scope - The construct scope
-     * @param id - The construct id
-     * @param config - Configuration for the metric filter
-     * @returns The created metric filter
-     * 
-     * @example
-     * ```typescript
-     * const filter = Monitoring.createMetricFilter(this, 'ErrorFilter', {
-     *   logGroup: myLogGroup,
-     *   filterPattern: 'ERROR',
-     *   metricName: 'ErrorCount',
-     *   metricNamespace: 'MyApp'
-     * });
-     * ```
+     * Creates a notification function based on the handler type
      */
-    static createMetricFilter(scope: Construct, id: string, config: MetricFilterConfig): MetricFilter {
-        const filter = new MetricFilter(scope, id, {
-            logGroup: config.logGroup,
-            filterPattern: FilterPattern.anyTerm(config.filterPattern),
-            metricName: config.metricName ?? `${id}Metric`,
-            metricNamespace: config.metricNamespace ?? 'CustomMetrics',
-            metricValue: config.metricValue ?? '1',
+    private createNotificationFunction(config: NotificationHandler): IFunction {
+        const id = `${config.type.charAt(0).toUpperCase() + config.type.slice(1)}Notifier`;
+
+        switch (config.type) {
+            case 'slack':
+                return this.createSlackFunction(id, config);
+            case 'teams':
+                return this.createTeamsFunction(id, config);
+            case 'googlechat':
+                return this.createGoogleChatFunction(id, config);
+            default:
+                throw new Error(`Unknown notification type: ${config.type}`);
+        }
+    }
+
+    /**
+     * Creates a Slack notification function
+     */
+    private createSlackFunction(id: string, config: NotificationHandler): IFunction {
+        return new LambdaFunction(this, id, {
+            runtime: Runtime.NODEJS_24_X,
+            handler: 'handler.handler',
+            code: Code.fromAsset(join(__dirname, 'assets/functions/monitoring/slack-notifier')),
+            environment: {
+                SLACK_WEBHOOK_URL: config.webhookUrl,
+                SLACK_CHANNEL: config.channel ?? '',
+                MESSAGE_PREFIX: config.messagePrefix ?? '',
+            },
+            timeout: Duration.seconds(30),
         });
-
-        return filter;
     }
 
     /**
-     * Creates a CloudWatch alarm for a metric filter
-     * 
-     * @param scope - The construct scope
-     * @param id - The construct id
-     * @param config - Configuration for the alarm
-     * @returns The created alarm
-     * 
-     * @example
-     * ```typescript
-     * const alarm = Monitoring.createAlarm(this, 'ErrorAlarm', {
-     *   metricFilter: errorFilter,
-     *   alarmName: 'HighErrorRate',
-     *   threshold: 5,
-     *   evaluationPeriods: 2
-     * });
-     * ```
+     * Creates a Teams notification function
      */
-    static createAlarm(scope: Construct, id: string, config: AlarmConfig): Alarm {
-        const alarm = new Alarm(scope, id, {
+    private createTeamsFunction(id: string, config: NotificationHandler): IFunction {
+        return new LambdaFunction(this, id, {
+            runtime: Runtime.NODEJS_24_X,
+            handler: 'handler.handler',
+            code: Code.fromAsset(join(__dirname, 'assets/functions/monitoring/teams-notifier')),
+            environment: {
+                WEBHOOK_URL: config.webhookUrl,
+                MESSAGE_PREFIX: config.messagePrefix ?? '',
+            },
+            timeout: Duration.seconds(30),
+        });
+    }
+
+    /**
+     * Creates a Google Chat notification function
+     */
+    private createGoogleChatFunction(id: string, config: NotificationHandler): IFunction {
+        return new LambdaFunction(this, id, {
+            runtime: Runtime.NODEJS_24_X,
+            handler: 'handler.handler',
+            code: Code.fromAsset(join(__dirname, 'assets/functions/monitoring/googlechat-notifier')),
+            environment: {
+                WEBHOOK_URL: config.webhookUrl,
+                MESSAGE_PREFIX: config.messagePrefix ?? '',
+            },
+            timeout: Duration.seconds(30),
+        });
+    }
+
+    /**
+     * Gets or creates the shared Lambda function for processing log errors
+     * This function is reused across all log subscriptions
+     */
+    private getOrCreateLogErrorFunction(): IFunction {
+        if (!this.logErrorFunction) {
+            this.logErrorFunction = new LambdaFunction(this, 'LogErrorFunction', {
+                runtime: Runtime.NODEJS_24_X,
+                handler: 'handler.handler',
+                code: Code.fromAsset(join(__dirname, 'assets/functions/monitoring/log-error-notifier')),
+                environment: {
+                    SNS_TOPIC_ARN: this.topic.topicArn,
+                },
+                timeout: Duration.seconds(30),
+                description: 'Processes error logs and publishes to SNS',
+            });
+
+            // Grant publish permission to SNS topic
+            this.topic.grantPublish(this.logErrorFunction);
+        }
+
+        return this.logErrorFunction;
+    }
+
+    /**
+     * Creates an alarm and adds it to this monitoring setup
+     */
+    public addAlarm(id: string, config: AlarmConfig): Alarm {
+        const alarm = new Alarm(this, id, {
             alarmName: config.alarmName,
             alarmDescription: config.alarmDescription,
             metric: config.metricFilter.metric({
@@ -239,206 +267,37 @@ export class Monitoring extends Construct {
             treatMissingData: config.treatMissingData ?? TreatMissingData.NOT_BREACHING,
         });
 
+        alarm.addAlarmAction(new SnsAction(this.topic));
+        this.alarms.push(alarm);
         return alarm;
     }
 
     /**
-     * Creates an SNS topic for notifications
-     * 
-     * @param scope - The construct scope
-     * @param id - The construct id
-     * @param config - Optional configuration for the SNS topic
-     * @returns The created SNS topic
-     * 
-     * @example
-     * ```typescript
-     * const topic = Monitoring.createSnsTopic(this, 'AlarmTopic', {
-     *   topicName: 'app-alarms',
-     *   displayName: 'Application Alarms'
-     * });
-     * ```
+     * Creates a metric filter on a log group and adds an alarm for it
      */
-    static createSnsTopic(scope: Construct, id: string, config?: SnsTopicConfig): ITopic {
-        const topic = new Topic(scope, id, {
-            topicName: config?.topicName,
-            displayName: config?.displayName,
-        });
-
-        return topic;
-    }
-
-    /**
-     * Creates a Lambda function to send SNS notifications to Slack
-     * 
-     * @param scope - The construct scope
-     * @param id - The construct id
-     * @param config - Configuration for Slack notifications
-     * @returns The created Lambda function
-     * 
-     * @example
-     * ```typescript
-     * const slackFunction = Monitoring.createSlackNotifier(this, 'SlackNotifier', {
-     *   slackWebhookUrl: process.env.SLACK_WEBHOOK_URL!,
-     *   slackChannel: '#alerts',
-     *   messagePrefix: '[PROD]'
-     * });
-     * ```
-     */
-    static createSlackNotifier(scope: Construct, id: string, config: SlackNotificationConfig): IFunction {
-        const slackFunction = new LambdaFunction(scope, id, {
-            runtime: Runtime.NODEJS_24_X,
-            handler: 'index.handler',
-            code: Code.fromInline(`
-const https = require('https');
-const url = require('url');
-
-exports.handler = async (event) => {
-    console.log('Received event:', JSON.stringify(event, null, 2));
-    
-    const webhookUrl = process.env.SLACK_WEBHOOK_URL;
-    const channel = process.env.SLACK_CHANNEL;
-    const messagePrefix = process.env.MESSAGE_PREFIX || '';
-    
-    if (!webhookUrl) {
-        throw new Error('SLACK_WEBHOOK_URL environment variable is required');
-    }
-    
-    const message = event.Records[0].Sns;
-    const subject = message.Subject || 'AWS Notification';
-    const body = message.Message;
-    
-    let parsedBody;
-    try {
-        parsedBody = JSON.parse(body);
-    } catch (e) {
-        parsedBody = { message: body };
-    }
-    
-    const alarmName = parsedBody.AlarmName || 'Unknown Alarm';
-    const newState = parsedBody.NewStateValue || 'ALARM';
-    const reason = parsedBody.NewStateReason || 'No reason provided';
-    const timestamp = parsedBody.StateChangeTime || new Date().toISOString();
-    
-    const color = newState === 'ALARM' ? 'danger' : newState === 'OK' ? 'good' : 'warning';
-    
-    const slackMessage = {
-        channel: channel,
-        username: 'AWS CloudWatch',
-        icon_emoji: ':warning:',
-        attachments: [{
-            color: color,
-            title: \`\${messagePrefix} \${alarmName}\`,
-            text: reason,
-            fields: [
-                { title: 'State', value: newState, short: true },
-                { title: 'Time', value: timestamp, short: true }
-            ],
-            footer: 'AWS CloudWatch Alarms',
-            ts: Math.floor(Date.parse(timestamp) / 1000)
-        }]
-    };
-    
-    const parsedUrl = url.parse(webhookUrl);
-    const postData = JSON.stringify(slackMessage);
-    
-    const options = {
-        hostname: parsedUrl.hostname,
-        port: 443,
-        path: parsedUrl.path,
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Content-Length': Buffer.byteLength(postData)
-        }
-    };
-    
-    return new Promise((resolve, reject) => {
-        const req = https.request(options, (res) => {
-            let responseBody = '';
-            res.on('data', (chunk) => responseBody += chunk);
-            res.on('end', () => {
-                if (res.statusCode === 200) {
-                    console.log('Successfully sent to Slack');
-                    resolve({ statusCode: 200, body: 'Sent to Slack' });
-                } else {
-                    console.error('Failed to send to Slack:', res.statusCode, responseBody);
-                    reject(new Error(\`Failed to send to Slack: \${res.statusCode}\`));
-                }
-            });
-        });
-        
-        req.on('error', (error) => {
-            console.error('Error sending to Slack:', error);
-            reject(error);
-        });
-        
-        req.write(postData);
-        req.end();
-    });
-};
-            `),
-            environment: {
-                SLACK_WEBHOOK_URL: config.slackWebhookUrl,
-                SLACK_CHANNEL: config.slackChannel ?? '',
-                MESSAGE_PREFIX: config.messagePrefix ?? '',
-            },
-            timeout: Duration.seconds(30),
-        });
-
-        return slackFunction;
-    }
-
-    /**
-     * Creates a complete monitoring setup: log filter → alarm → SNS → Slack
-     * 
-     * @param scope - The construct scope
-     * @param id - The construct id prefix
-     * @param config - Combined configuration object
-     * @returns Object containing all created resources
-     * 
-     * @example
-     * ```typescript
-     * const monitoring = Monitoring.createErrorMonitoring(this, 'ErrorMonitoring', {
-     *   logGroup: myLogGroup,
-     *   filterPattern: 'ERROR',
-     *   slackWebhookUrl: process.env.SLACK_WEBHOOK_URL!,
-     *   slackChannel: '#alerts',
-     *   threshold: 3
-     * });
-     * ```
-     */
-    static createErrorMonitoring(
-        scope: Construct,
+    public addLogAlarm(
         id: string,
         config: {
             logGroup: ILogGroup;
             filterPattern: string;
-            slackWebhookUrl: string;
-            slackChannel?: string;
-            messagePrefix?: string;
             metricName?: string;
             metricNamespace?: string;
             threshold?: number;
             alarmName?: string;
             alarmDescription?: string;
         }
-    ): MonitoringSetup {
+    ): { metricFilter: MetricFilter; alarm: Alarm } {
         // Create metric filter
-        const metricFilter = Monitoring.createMetricFilter(scope, `${id}MetricFilter`, {
+        const metricFilter = new MetricFilter(this, `${id}MetricFilter`, {
             logGroup: config.logGroup,
-            filterPattern: config.filterPattern,
+            filterPattern: FilterPattern.anyTerm(config.filterPattern),
             metricName: config.metricName ?? `${id}Count`,
             metricNamespace: config.metricNamespace ?? 'CustomMetrics',
-        });
-
-        // Create SNS topic
-        const snsTopic = Monitoring.createSnsTopic(scope, `${id}Topic`, {
-            topicName: `${id}-topic`,
-            displayName: `${id} Notifications`,
+            metricValue: '1',
         });
 
         // Create alarm
-        const alarm = Monitoring.createAlarm(scope, `${id}Alarm`, {
+        const alarm = this.addAlarm(`${id}Alarm`, {
             metricFilter,
             alarmName: config.alarmName ?? `${id}Alarm`,
             alarmDescription: config.alarmDescription ?? `Alarm for ${config.filterPattern} pattern in logs`,
@@ -446,25 +305,136 @@ exports.handler = async (event) => {
             evaluationPeriods: 1,
         });
 
-        // Add SNS action to alarm
-        alarm.addAlarmAction(new SnsAction(snsTopic));
+        return { metricFilter, alarm };
+    }
 
-        // Create Slack notifier Lambda
-        const slackFunction = Monitoring.createSlackNotifier(scope, `${id}SlackNotifier`, {
-            slackWebhookUrl: config.slackWebhookUrl,
-            slackChannel: config.slackChannel,
-            messagePrefix: config.messagePrefix,
+    /**
+     * Monitors a CloudWatch log group for error logs and sends notifications in real-time
+     * JSON logs are parsed automatically to extract error details
+     * 
+     * Multiple monitors share the same Lambda function for efficiency.
+     * 
+     * @param id - Unique identifier for this monitor
+     * @param config - Configuration for the error log monitor
+     * @returns Object containing the subscription filter and shared Lambda function
+     * 
+     * @example
+     * ```typescript
+     * const monitoring = new Monitoring(this, 'Monitoring', {
+     *   notifications: [
+     *     Monitoring.slackNotifier({
+     *       slackWebhookUrl: 'https://hooks.slack.com/services/YOUR/WEBHOOK/URL',
+     *       slackChannel: '#alerts',
+     *     }),
+     *   ],
+     * });
+     * 
+     * monitoring.monitorErrors('ApiErrors', {
+     *   logGroup: myFunction.logGroup,
+     * });
+     * ```
+     */
+    public monitorErrors(
+        id: string,
+        config: {
+            /**
+             * The log group to monitor
+             */
+            logGroup: ILogGroup;
+            /**
+             * The JSON field to check (default: "level")
+             */
+            levelField?: string;
+            /**
+             * The error level values to match (default: ["ERROR"])
+             * Can include multiple levels like ["ERROR", "FATAL", "CRITICAL"]
+             */
+            errorLevels?: string[];
+            /**
+             * Subscription filter name (default: auto-generated)
+             */
+            filterName?: string;
+        }
+    ): { subscriptionFilter: SubscriptionFilter; logFunction: IFunction } {
+        const levelField = config.levelField ?? 'level';
+        const errorLevels = config.errorLevels ?? ['ERROR'];
+
+        // Create filter pattern for JSON logs with ERROR level
+        // Matches logs like: {"level":"ERROR","timestamp":"...","message":"..."}
+        const filterPattern = errorLevels.length === 1
+            ? FilterPattern.stringValue(`$.${levelField}`, '=', errorLevels[0])
+            : FilterPattern.any(
+                ...errorLevels.map(level =>
+                    FilterPattern.stringValue(`$.${levelField}`, '=', level)
+                )
+            );
+
+        // Get or create the shared Lambda function
+        const logFunction = this.getOrCreateLogErrorFunction();
+
+        // Create subscription filter
+        const subscriptionFilter = new SubscriptionFilter(this, `${id}Subscription`, {
+            logGroup: config.logGroup,
+            destination: new LambdaDestination(logFunction),
+            filterPattern,
+            filterName: config.filterName,
         });
 
-        // Subscribe Lambda to SNS topic
-        snsTopic.addSubscription(new LambdaSubscription(slackFunction));
+        return { subscriptionFilter, logFunction };
+    }
 
+    /**
+     * Creates a CloudWatch Log Group with configurable retention
+     */
+    static createLogGroup(scope: Construct, id: string, config?: LogGroupConfig): ILogGroup {
+        return new LogGroup(scope, id, {
+            logGroupName: config?.logGroupName,
+            retention: config?.retention ?? RetentionDays.ONE_WEEK,
+            removalPolicy: config?.removalPolicy ?? RemovalPolicy.DESTROY,
+        });
+    }
+
+    /**
+     * Static factory method to create a Slack notifier configuration
+     */
+    static slackNotifier(config: {
+        slackWebhookUrl: string;
+        slackChannel?: string;
+        messagePrefix?: string;
+    }): NotificationHandler {
         return {
-            logGroup: config.logGroup,
-            metricFilter,
-            alarm,
-            snsTopic,
-            slackFunction,
+            type: 'slack',
+            webhookUrl: config.slackWebhookUrl,
+            channel: config.slackChannel,
+            messagePrefix: config.messagePrefix,
+        };
+    }
+
+    /**
+     * Static factory method to create a Teams notifier configuration
+     */
+    static teamsNotifier(config: {
+        webhookUrl: string;
+        messagePrefix?: string;
+    }): NotificationHandler {
+        return {
+            type: 'teams',
+            webhookUrl: config.webhookUrl,
+            messagePrefix: config.messagePrefix,
+        };
+    }
+
+    /**
+     * Static factory method to create a Google Chat notifier configuration
+     */
+    static googleChatNotifier(config: {
+        webhookUrl: string;
+        messagePrefix?: string;
+    }): NotificationHandler {
+        return {
+            type: 'googlechat',
+            webhookUrl: config.webhookUrl,
+            messagePrefix: config.messagePrefix,
         };
     }
 }

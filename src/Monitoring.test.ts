@@ -86,171 +86,175 @@ describe('Monitoring', () => {
         });
     });
 
-    describe('createMetricFilter', () => {
-        it('creates metric filter for log group', () => {
-            const app = new App();
-            const stack = new Stack(app, 'TestStack');
+    describe('Monitoring instance', () => {
+        describe('constructor', () => {
+            it('creates Monitoring with Slack notification', () => {
+                const app = new App();
+                const stack = new Stack(app, 'TestStack');
 
-            const logGroup = Monitoring.createLogGroup(stack, 'TestLogGroup');
-            Monitoring.createMetricFilter(stack, 'ErrorFilter', {
-                logGroup,
-                filterPattern: 'ERROR',
-                metricName: 'ErrorCount',
-                metricNamespace: 'MyApp',
-            });
+                const monitoring = new Monitoring(stack, 'Monitoring', {
+                    notifications: [
+                        Monitoring.slackNotifier({
+                            slackWebhookUrl: 'https://hooks.slack.com/services/xxx',
+                            slackChannel: '#alerts',
+                        }),
+                    ],
+                });
 
-            const template = Template.fromStack(stack);
-            template.hasResourceProperties('AWS::Logs::MetricFilter', {
-                FilterPattern: Match.anyValue(),
-                MetricTransformations: [
-                    {
-                        MetricName: 'ErrorCount',
-                        MetricNamespace: 'MyApp',
-                        MetricValue: '1',
+                const template = Template.fromStack(stack);
+
+                // Verify SNS topic created
+                template.resourceCountIs('AWS::SNS::Topic', 1);
+
+                // Verify Lambda function created
+                template.hasResourceProperties('AWS::Lambda::Function', {
+                    Runtime: 'nodejs24.x',
+                    Environment: {
+                        Variables: {
+                            SLACK_WEBHOOK_URL: 'https://hooks.slack.com/services/xxx',
+                            SLACK_CHANNEL: '#alerts',
+                        },
                     },
-                ],
+                });
+
+                // Verify subscription
+                template.resourceCountIs('AWS::SNS::Subscription', 1);
+
+                expect(monitoring.topic).toBeDefined();
+                expect(monitoring.notificationFunctions).toHaveLength(1);
             });
         });
-    });
 
-    describe('createAlarm', () => {
-        it('creates CloudWatch alarm for metric filter', () => {
-            const app = new App();
-            const stack = new Stack(app, 'TestStack');
+        describe('monitorErrors', () => {
+            it('creates subscription filter for ERROR level JSON logs', () => {
+                const app = new App();
+                const stack = new Stack(app, 'TestStack');
 
-            const logGroup = Monitoring.createLogGroup(stack, 'TestLogGroup');
-            const metricFilter = Monitoring.createMetricFilter(stack, 'ErrorFilter', {
-                logGroup,
-                filterPattern: 'ERROR',
-            });
+                const logGroup = Monitoring.createLogGroup(stack, 'TestLogGroup');
+                const monitoring = new Monitoring(stack, 'Monitoring');
 
-            Monitoring.createAlarm(stack, 'ErrorAlarm', {
-                metricFilter,
-                alarmName: 'HighErrorRate',
-                threshold: 5,
-                evaluationPeriods: 2,
-            });
+                const result = monitoring.monitorErrors('ErrorLogger', {
+                    logGroup,
+                });
 
-            const template = Template.fromStack(stack);
-            template.hasResourceProperties('AWS::CloudWatch::Alarm', {
-                AlarmName: 'HighErrorRate',
-                Threshold: 5,
-                EvaluationPeriods: 2,
-                ComparisonOperator: 'GreaterThanOrEqualToThreshold',
-            });
-        });
-    });
+                const template = Template.fromStack(stack);
 
-    describe('createSnsTopic', () => {
-        it('creates SNS topic with defaults', () => {
-            const app = new App();
-            const stack = new Stack(app, 'TestStack');
-
-            Monitoring.createSnsTopic(stack, 'AlarmTopic');
-
-            const template = Template.fromStack(stack);
-            template.resourceCountIs('AWS::SNS::Topic', 1);
-        });
-
-        it('creates SNS topic with custom name', () => {
-            const app = new App();
-            const stack = new Stack(app, 'TestStack');
-
-            Monitoring.createSnsTopic(stack, 'AlarmTopic', {
-                topicName: 'my-alarms',
-                displayName: 'My Alarms',
-            });
-
-            const template = Template.fromStack(stack);
-            template.hasResourceProperties('AWS::SNS::Topic', {
-                TopicName: 'my-alarms',
-                DisplayName: 'My Alarms',
-            });
-        });
-    });
-
-    describe('createSlackNotifier', () => {
-        it('creates Lambda function for Slack notifications', () => {
-            const app = new App();
-            const stack = new Stack(app, 'TestStack');
-
-            Monitoring.createSlackNotifier(stack, 'SlackNotifier', {
-                slackWebhookUrl: 'https://hooks.slack.com/services/xxx',
-                slackChannel: '#alerts',
-            });
-
-            const template = Template.fromStack(stack);
-            template.hasResourceProperties('AWS::Lambda::Function', {
-                Runtime: 'nodejs24.x',
-                Environment: {
-                    Variables: {
-                        SLACK_WEBHOOK_URL: 'https://hooks.slack.com/services/xxx',
-                        SLACK_CHANNEL: '#alerts',
+                // Verify Lambda function for processing logs
+                template.hasResourceProperties('AWS::Lambda::Function', {
+                    Runtime: 'nodejs24.x',
+                    Environment: {
+                        Variables: {
+                            SNS_TOPIC_ARN: Match.anyValue(),
+                        },
                     },
-                },
-            });
-        });
-    });
+                });
 
-    describe('createErrorMonitoring', () => {
-        it('creates complete monitoring setup', () => {
-            const app = new App();
-            const stack = new Stack(app, 'TestStack');
+                // Verify subscription filter created
+                template.hasResourceProperties('AWS::Logs::SubscriptionFilter', {
+                    FilterPattern: '{ $.level = "ERROR" }',
+                });
 
-            const logGroup = Monitoring.createLogGroup(stack, 'TestLogGroup');
-            const result = Monitoring.createErrorMonitoring(stack, 'ErrorMonitoring', {
-                logGroup,
-                filterPattern: 'ERROR',
-                slackWebhookUrl: 'https://hooks.slack.com/services/xxx',
-                slackChannel: '#alerts',
-                threshold: 3,
+                // Verify Lambda permission for CloudWatch Logs
+                template.hasResourceProperties('AWS::Lambda::Permission', {
+                    Action: 'lambda:InvokeFunction',
+                    Principal: 'logs.amazonaws.com',
+                });
+
+                expect(result.subscriptionFilter).toBeDefined();
+                expect(result.logFunction).toBeDefined();
             });
 
-            const template = Template.fromStack(stack);
+            it('creates subscription filter with multiple error levels', () => {
+                const app = new App();
+                const stack = new Stack(app, 'TestStack');
 
-            // Verify all resources are created
-            template.resourceCountIs('AWS::Logs::MetricFilter', 1);
-            template.resourceCountIs('AWS::CloudWatch::Alarm', 1);
-            template.resourceCountIs('AWS::SNS::Topic', 1);
-            template.resourceCountIs('AWS::Lambda::Function', 1);
-            template.resourceCountIs('AWS::SNS::Subscription', 1);
+                const logGroup = Monitoring.createLogGroup(stack, 'TestLogGroup');
+                const monitoring = new Monitoring(stack, 'Monitoring');
 
-            // Verify alarm configuration
-            template.hasResourceProperties('AWS::CloudWatch::Alarm', {
-                Threshold: 3,
+                monitoring.monitorErrors('CriticalLogger', {
+                    logGroup,
+                    errorLevels: ['ERROR', 'FATAL', 'CRITICAL'],
+                });
+
+                const template = Template.fromStack(stack);
+
+                // Verify subscription filter handles multiple levels
+                template.hasResourceProperties('AWS::Logs::SubscriptionFilter', {
+                    FilterPattern: '{ ($.level = "ERROR") || ($.level = "FATAL") || ($.level = "CRITICAL") }',
+                });
             });
 
-            // Verify result contains all resources
-            expect(result.logGroup).toBeDefined();
-            expect(result.metricFilter).toBeDefined();
-            expect(result.alarm).toBeDefined();
-            expect(result.snsTopic).toBeDefined();
-            expect(result.slackFunction).toBeDefined();
-        });
+            it('creates subscription filter with custom level field', () => {
+                const app = new App();
+                const stack = new Stack(app, 'TestStack');
 
-        it('wires alarm to SNS and SNS to Lambda', () => {
-            const app = new App();
-            const stack = new Stack(app, 'TestStack');
+                const logGroup = Monitoring.createLogGroup(stack, 'TestLogGroup');
+                const monitoring = new Monitoring(stack, 'Monitoring');
 
-            const logGroup = Monitoring.createLogGroup(stack, 'TestLogGroup');
-            Monitoring.createErrorMonitoring(stack, 'ErrorMonitoring', {
-                logGroup,
-                filterPattern: 'ERROR',
-                slackWebhookUrl: 'https://hooks.slack.com/services/xxx',
+                monitoring.monitorErrors('CustomLogger', {
+                    logGroup,
+                    levelField: 'severity',
+                });
+
+                const template = Template.fromStack(stack);
+
+                // Verify custom field name
+                template.hasResourceProperties('AWS::Logs::SubscriptionFilter', {
+                    FilterPattern: '{ $.severity = "ERROR" }',
+                });
             });
 
-            const template = Template.fromStack(stack);
+            it('reuses the same Lambda function for multiple subscriptions', () => {
+                const app = new App();
+                const stack = new Stack(app, 'TestStack');
 
-            // Verify alarm has SNS action
-            template.hasResourceProperties('AWS::CloudWatch::Alarm', {
-                AlarmActions: Match.arrayWith([
-                    Match.objectLike({ Ref: Match.stringLikeRegexp('ErrorMonitoringTopic') }),
-                ]),
+                const logGroup1 = Monitoring.createLogGroup(stack, 'TestLogGroup1');
+                const logGroup2 = Monitoring.createLogGroup(stack, 'TestLogGroup2');
+                const monitoring = new Monitoring(stack, 'Monitoring');
+
+                const result1 = monitoring.monitorErrors('ErrorLogger1', {
+                    logGroup: logGroup1,
+                });
+
+                const result2 = monitoring.monitorErrors('ErrorLogger2', {
+                    logGroup: logGroup2,
+                });
+
+                const template = Template.fromStack(stack);
+
+                // Verify only ONE Lambda function is created for both subscriptions
+                template.resourceCountIs('AWS::Lambda::Function', 1);
+
+                // Verify both subscriptions use the same function
+                expect(result1.logFunction).toBe(result2.logFunction);
+
+                // Verify both subscription filters are created
+                template.resourceCountIs('AWS::Logs::SubscriptionFilter', 2);
             });
 
-            // Verify SNS subscription exists
-            template.hasResourceProperties('AWS::SNS::Subscription', {
-                Protocol: 'lambda',
+            it('allows multiple subscriptions with different error levels', () => {
+                const app = new App();
+                const stack = new Stack(app, 'TestStack');
+
+                const logGroup = Monitoring.createLogGroup(stack, 'TestLogGroup');
+                const monitoring = new Monitoring(stack, 'Monitoring');
+
+                // Add first subscription for ERROR
+                monitoring.monitorErrors('ErrorLogger', {
+                    logGroup,
+                });
+
+                // Add second subscription for FATAL
+                monitoring.monitorErrors('FatalLogger', {
+                    logGroup,
+                    errorLevels: ['FATAL'],
+                });
+
+                const template = Template.fromStack(stack);
+
+                // Verify both subscription filters created but only ONE Lambda function
+                template.resourceCountIs('AWS::Logs::SubscriptionFilter', 2);
+                template.resourceCountIs('AWS::Lambda::Function', 1);
             });
         });
     });
