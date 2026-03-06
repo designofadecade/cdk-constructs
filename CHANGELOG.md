@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-03-06
+
+### Changed
+- Migrated to new AWS CDK threat protection API for Cognito
+  - Use `standardThreatProtectionMode` with ESSENTIALS feature plan (values: NO_ENFORCEMENT, AUDIT_ONLY, FULL_FUNCTION)
+  - Use `customThreatProtectionMode` with PLUS feature plan (values: AUDIT_ONLY, FULL_FUNCTION)
+  - Removed deprecated `AdvancedSecurityMode` (was never used in production)
+  - See [Cognito documentation](./docs/Cognito.md#threat-protection-advanced-security) for usage examples
+- Removed deprecated `ParameterType` from ParameterStore construct
+  - `type` property removed from `ParameterStoreProps` (was always 'String')
+  - `secureString()` static method removed (SecureString parameters cannot be created via CDK/CloudFormation)
+  - Note: Use AWS Console, CLI, or SDK to create SecureString parameters, then import them with `fromExistingParameter()`
+
 ### Added
 - **Enhanced Monitoring construct** with real-time error log notifications
   - `monitorErrors()` - Real-time JSON error log monitoring with CloudWatch subscription filters

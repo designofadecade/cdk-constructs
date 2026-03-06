@@ -7,6 +7,7 @@ import { LambdaSubscription } from 'aws-cdk-lib/aws-sns-subscriptions';
 import { Alarm, ComparisonOperator, TreatMissingData } from 'aws-cdk-lib/aws-cloudwatch';
 import { SnsAction } from 'aws-cdk-lib/aws-cloudwatch-actions';
 import { Function as LambdaFunction, Runtime, Code, type IFunction } from 'aws-cdk-lib/aws-lambda';
+import { PolicyStatement, Effect } from 'aws-cdk-lib/aws-iam';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
@@ -18,7 +19,15 @@ const __dirname = dirname(__filename);
  */
 export interface NotificationHandler {
     readonly type: 'slack' | 'teams' | 'googlechat';
-    readonly webhookUrl: string;
+    /**
+     * Direct webhook URL (deprecated - use webhookParameterArn instead)
+     */
+    readonly webhookUrl?: string;
+    /**
+     * ARN of the Systems Manager Parameter containing the webhook URL
+     * The parameter can be a String or SecureString type
+     */
+    readonly webhookParameterArn?: string;
     readonly channel?: string;
     readonly messagePrefix?: string;
     readonly functionName?: string;
@@ -193,52 +202,163 @@ export class Monitoring extends Construct {
      * Creates a Slack notification function
      */
     private createSlackFunction(id: string, config: NotificationHandler): IFunction {
-        return new LambdaFunction(this, id, {
+        if (!config.webhookUrl && !config.webhookParameterArn) {
+            throw new Error('Either webhookUrl or webhookParameterArn must be provided');
+        }
+
+        const environment: Record<string, string> = {
+            SLACK_CHANNEL: config.channel ?? '',
+            MESSAGE_PREFIX: config.messagePrefix ?? '',
+        };
+
+        if (config.webhookUrl) {
+            environment.SLACK_WEBHOOK_URL = config.webhookUrl;
+        }
+        if (config.webhookParameterArn) {
+            environment.WEBHOOK_PARAMETER_ARN = config.webhookParameterArn;
+        }
+
+        const fn = new LambdaFunction(this, id, {
             runtime: Runtime.NODEJS_24_X,
             handler: 'handler.handler',
             code: Code.fromAsset(join(__dirname, 'assets/functions/monitoring/slack-notifier')),
             functionName: config.functionName,
-            environment: {
-                SLACK_WEBHOOK_URL: config.webhookUrl,
-                SLACK_CHANNEL: config.channel ?? '',
-                MESSAGE_PREFIX: config.messagePrefix ?? '',
-            },
+            environment,
             timeout: Duration.seconds(30),
         });
+
+        // Grant permission to read from SSM if parameter ARN is provided
+        if (config.webhookParameterArn) {
+            fn.addToRolePolicy(new PolicyStatement({
+                effect: Effect.ALLOW,
+                actions: [
+                    'ssm:GetParameter',
+                    'ssm:GetParameters',
+                ],
+                resources: [config.webhookParameterArn],
+            }));
+            // Add KMS decrypt permission for SecureString parameters
+            fn.addToRolePolicy(new PolicyStatement({
+                effect: Effect.ALLOW,
+                actions: ['kms:Decrypt'],
+                resources: ['*'],
+                conditions: {
+                    StringEquals: {
+                        'kms:ViaService': `ssm.${Stack.of(this).region}.amazonaws.com`,
+                    },
+                },
+            }));
+        }
+
+        return fn;
     }
 
     /**
      * Creates a Teams notification function
      */
     private createTeamsFunction(id: string, config: NotificationHandler): IFunction {
-        return new LambdaFunction(this, id, {
+        if (!config.webhookUrl && !config.webhookParameterArn) {
+            throw new Error('Either webhookUrl or webhookParameterArn must be provided');
+        }
+
+        const environment: Record<string, string> = {
+            MESSAGE_PREFIX: config.messagePrefix ?? '',
+        };
+
+        if (config.webhookUrl) {
+            environment.WEBHOOK_URL = config.webhookUrl;
+        }
+        if (config.webhookParameterArn) {
+            environment.WEBHOOK_PARAMETER_ARN = config.webhookParameterArn;
+        }
+
+        const fn = new LambdaFunction(this, id, {
             runtime: Runtime.NODEJS_24_X,
             handler: 'handler.handler',
             code: Code.fromAsset(join(__dirname, 'assets/functions/monitoring/teams-notifier')),
             functionName: config.functionName,
-            environment: {
-                WEBHOOK_URL: config.webhookUrl,
-                MESSAGE_PREFIX: config.messagePrefix ?? '',
-            },
+            environment,
             timeout: Duration.seconds(30),
         });
+
+        // Grant permission to read from SSM if parameter ARN is provided
+        if (config.webhookParameterArn) {
+            fn.addToRolePolicy(new PolicyStatement({
+                effect: Effect.ALLOW,
+                actions: [
+                    'ssm:GetParameter',
+                    'ssm:GetParameters',
+                ],
+                resources: [config.webhookParameterArn],
+            }));
+            // Add KMS decrypt permission for SecureString parameters
+            fn.addToRolePolicy(new PolicyStatement({
+                effect: Effect.ALLOW,
+                actions: ['kms:Decrypt'],
+                resources: ['*'],
+                conditions: {
+                    StringEquals: {
+                        'kms:ViaService': `ssm.${Stack.of(this).region}.amazonaws.com`,
+                    },
+                },
+            }));
+        }
+
+        return fn;
     }
 
     /**
      * Creates a Google Chat notification function
      */
     private createGoogleChatFunction(id: string, config: NotificationHandler): IFunction {
-        return new LambdaFunction(this, id, {
+        if (!config.webhookUrl && !config.webhookParameterArn) {
+            throw new Error('Either webhookUrl or webhookParameterArn must be provided');
+        }
+
+        const environment: Record<string, string> = {
+            MESSAGE_PREFIX: config.messagePrefix ?? '',
+        };
+
+        if (config.webhookUrl) {
+            environment.WEBHOOK_URL = config.webhookUrl;
+        }
+        if (config.webhookParameterArn) {
+            environment.WEBHOOK_PARAMETER_ARN = config.webhookParameterArn;
+        }
+
+        const fn = new LambdaFunction(this, id, {
             runtime: Runtime.NODEJS_24_X,
             handler: 'handler.handler',
             code: Code.fromAsset(join(__dirname, 'assets/functions/monitoring/googlechat-notifier')),
             functionName: config.functionName,
-            environment: {
-                WEBHOOK_URL: config.webhookUrl,
-                MESSAGE_PREFIX: config.messagePrefix ?? '',
-            },
+            environment,
             timeout: Duration.seconds(30),
         });
+
+        // Grant permission to read from SSM if parameter ARN is provided
+        if (config.webhookParameterArn) {
+            fn.addToRolePolicy(new PolicyStatement({
+                effect: Effect.ALLOW,
+                actions: [
+                    'ssm:GetParameter',
+                    'ssm:GetParameters',
+                ],
+                resources: [config.webhookParameterArn],
+            }));
+            // Add KMS decrypt permission for SecureString parameters
+            fn.addToRolePolicy(new PolicyStatement({
+                effect: Effect.ALLOW,
+                actions: ['kms:Decrypt'],
+                resources: ['*'],
+                conditions: {
+                    StringEquals: {
+                        'kms:ViaService': `ssm.${Stack.of(this).region}.amazonaws.com`,
+                    },
+                },
+            }));
+        }
+
+        return fn;
     }
 
     /**
@@ -412,9 +532,26 @@ export class Monitoring extends Construct {
 
     /**
      * Static factory method to create a Slack notifier configuration
+     * 
+     * @example With direct webhook URL (deprecated, use parameter ARN for better security):
+     * ```typescript
+     * Monitoring.slackNotifier({
+     *   slackWebhookUrl: 'https://hooks.slack.com/services/YOUR/WEBHOOK/URL',
+     *   slackChannel: '#alerts',
+     * })
+     * ```
+     * 
+     * @example With Systems Manager Parameter ARN (recommended):
+     * ```typescript
+     * Monitoring.slackNotifier({
+     *   webhookParameterArn: 'arn:aws:ssm:us-east-1:123456789012:parameter/slack-webhook',
+     *   slackChannel: '#alerts',
+     * })
+     * ```
      */
     static slackNotifier(config: {
-        slackWebhookUrl: string;
+        slackWebhookUrl?: string;
+        webhookParameterArn?: string;
         slackChannel?: string;
         messagePrefix?: string;
         functionName?: string;
@@ -422,6 +559,7 @@ export class Monitoring extends Construct {
         return {
             type: 'slack',
             webhookUrl: config.slackWebhookUrl,
+            webhookParameterArn: config.webhookParameterArn,
             channel: config.slackChannel,
             messagePrefix: config.messagePrefix,
             functionName: config.functionName,
@@ -430,15 +568,31 @@ export class Monitoring extends Construct {
 
     /**
      * Static factory method to create a Teams notifier configuration
+     * 
+     * @example With direct webhook URL (deprecated, use parameter ARN for better security):
+     * ```typescript
+     * Monitoring.teamsNotifier({
+     *   webhookUrl: 'https://outlook.office.com/webhook/YOUR-WEBHOOK-URL',
+     * })
+     * ```
+     * 
+     * @example With Systems Manager Parameter ARN (recommended):
+     * ```typescript
+     * Monitoring.teamsNotifier({
+     *   webhookParameterArn: 'arn:aws:ssm:us-east-1:123456789012:parameter/teams-webhook',
+     * })
+     * ```
      */
     static teamsNotifier(config: {
-        webhookUrl: string;
+        webhookUrl?: string;
+        webhookParameterArn?: string;
         messagePrefix?: string;
         functionName?: string;
     }): NotificationHandler {
         return {
             type: 'teams',
             webhookUrl: config.webhookUrl,
+            webhookParameterArn: config.webhookParameterArn,
             messagePrefix: config.messagePrefix,
             functionName: config.functionName,
         };
@@ -446,15 +600,31 @@ export class Monitoring extends Construct {
 
     /**
      * Static factory method to create a Google Chat notifier configuration
+     * 
+     * @example With direct webhook URL (deprecated, use parameter ARN for better security):
+     * ```typescript
+     * Monitoring.googleChatNotifier({
+     *   webhookUrl: 'https://chat.googleapis.com/v1/spaces/YOUR-WEBHOOK-URL',
+     * })
+     * ```
+     * 
+     * @example With Systems Manager Parameter ARN (recommended):
+     * ```typescript
+     * Monitoring.googleChatNotifier({
+     *   webhookParameterArn: 'arn:aws:ssm:us-east-1:123456789012:parameter/googlechat-webhook',
+     * })
+     * ```
      */
     static googleChatNotifier(config: {
-        webhookUrl: string;
+        webhookUrl?: string;
+        webhookParameterArn?: string;
         messagePrefix?: string;
         functionName?: string;
     }): NotificationHandler {
         return {
             type: 'googlechat',
             webhookUrl: config.webhookUrl,
+            webhookParameterArn: config.webhookParameterArn,
             messagePrefix: config.messagePrefix,
             functionName: config.functionName,
         };

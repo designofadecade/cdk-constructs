@@ -12,7 +12,8 @@ import {
     UserPoolOperation,
     Mfa,
     FeaturePlan,
-    AdvancedSecurityMode,
+    StandardThreatProtectionMode,
+    CustomThreatProtectionMode,
     type IUserPool,
     type UserPoolClient,
     type UserPoolDomain,
@@ -211,13 +212,21 @@ export interface NotifyConfiguration {
  */
 export interface ThreatProtectionConfig {
     /**
-     * Advanced security mode
-     * - OFF: Advanced security is disabled
-     * - AUDIT: Advanced security is in audit mode (logs events but doesn't take action)
-     * - ENFORCED: Advanced security is enforced (takes action based on risk detection)
-     * @default AdvancedSecurityMode.OFF
+     * Standard threat protection mode (for ESSENTIALS feature plan)
+     * - NO_ENFORCEMENT: Cognito doesn't gather metrics or take preventative actions
+     * - AUDIT_ONLY: Cognito gathers metrics but doesn't take automatic action
+     * - FULL_FUNCTION: Cognito takes preventative actions based on risk levels
+     * @default StandardThreatProtectionMode.NO_ENFORCEMENT
      */
-    readonly advancedSecurityMode?: AdvancedSecurityMode;
+    readonly standardThreatProtectionMode?: StandardThreatProtectionMode;
+
+    /**
+     * Custom threat protection mode (for PLUS feature plan)
+     * - AUDIT_ONLY: Cognito gathers metrics but doesn't take automatic action
+     * - FULL_FUNCTION: Cognito takes preventative actions based on risk levels
+     * @default - no custom threat protection
+     */
+    readonly customThreatProtectionMode?: CustomThreatProtectionMode;
 
     /**
      * Account takeover risk configuration
@@ -746,9 +755,14 @@ export class Cognito extends Construct {
     static readonly LogLevel = LogLevel;
 
     /**
-     * Advanced security mode options
+     * Standard threat protection mode options (for ESSENTIALS feature plan)
      */
-    static readonly AdvancedSecurityMode = AdvancedSecurityMode;
+    static readonly StandardThreatProtectionMode = StandardThreatProtectionMode;
+
+    /**
+     * Custom threat protection mode options (for PLUS feature plan)
+     */
+    static readonly CustomThreatProtectionMode = CustomThreatProtectionMode;
 
     /**
      * Account takeover action types
@@ -802,9 +816,11 @@ export class Cognito extends Construct {
                     sesVerifiedDomain: props.sesEmail.verifiedDomain,
                 })
                 : undefined,
-            ...(props.threatProtection?.advancedSecurityMode && props.threatProtection.advancedSecurityMode !== AdvancedSecurityMode.OFF
-                ? { advancedSecurityMode: props.threatProtection.advancedSecurityMode }
-                : {}),
+            ...(props.threatProtection?.standardThreatProtectionMode !== undefined
+                ? { standardThreatProtectionMode: props.threatProtection.standardThreatProtectionMode }
+                : props.threatProtection?.customThreatProtectionMode !== undefined
+                    ? { customThreatProtectionMode: props.threatProtection.customThreatProtectionMode }
+                    : {}),
         });
 
         this.#userPoolDomain = this.#userPool.addDomain('UserPoolDomain', {
@@ -909,7 +925,13 @@ export class Cognito extends Construct {
         }
 
         // Configure threat protection if enabled
-        if (props.threatProtection?.advancedSecurityMode && props.threatProtection.advancedSecurityMode !== AdvancedSecurityMode.OFF) {
+        const isThreatProtectionEnabled =
+            props.threatProtection?.standardThreatProtectionMode === StandardThreatProtectionMode.FULL_FUNCTION ||
+            props.threatProtection?.standardThreatProtectionMode === StandardThreatProtectionMode.AUDIT_ONLY ||
+            props.threatProtection?.customThreatProtectionMode === CustomThreatProtectionMode.FULL_FUNCTION ||
+            props.threatProtection?.customThreatProtectionMode === CustomThreatProtectionMode.AUDIT_ONLY;
+
+        if (isThreatProtectionEnabled) {
             const riskConfigProps: any = {};
 
             // Configure account takeover risk

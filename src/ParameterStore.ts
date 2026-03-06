@@ -1,6 +1,6 @@
 import { Construct } from 'constructs';
 import { Tags, CfnOutput } from 'aws-cdk-lib';
-import { StringParameter, type IParameter, ParameterType, ParameterTier } from 'aws-cdk-lib/aws-ssm';
+import { StringParameter, type IParameter, ParameterTier } from 'aws-cdk-lib/aws-ssm';
 import type { IGrantable } from 'aws-cdk-lib/aws-iam';
 
 /**
@@ -36,12 +36,6 @@ export interface ParameterStoreProps {
     readonly description?: string;
 
     /**
-     * The type of parameter
-     * @default ParameterType.STRING
-     */
-    readonly type?: ParameterType;
-
-    /**
      * The tier of the parameter
      * @default ParameterTier.STANDARD
      */
@@ -61,8 +55,11 @@ export interface ParameterStoreProps {
  * - Support for string values and JSON objects
  * - Automatic tagging
  * - Convenient methods for granting access
- * - Support for different parameter types (String, StringList, SecureString)
+ * - Support for standard string parameters
  * - Placeholder value constant for initial deployment
+ * 
+ * Note: SecureString parameters cannot be created via CDK/CloudFormation.
+ * Use AWS Console, CLI, or SDK to create SecureString parameters, then import them.
  * 
  * @example
  * ```typescript
@@ -85,11 +82,10 @@ export interface ParameterStoreProps {
  *   stack: { config: { parameterNamePrefix: '/prod/' }, tags: [] },
  * });
  * 
- * // Create a secure string parameter
+ * // Create a placeholder parameter (to be replaced manually in AWS Console)
  * const apiKey = new ParameterStore(this, 'ApiKey', {
  *   name: '/app/api-key',
  *   value: ParameterStore.REPLACE_ME,
- *   type: ParameterType.SECURE_STRING,
  *   stack: { config: { parameterNamePrefix: '/prod/' }, tags: [] },
  * });
  * 
@@ -121,7 +117,6 @@ export class ParameterStore extends Construct {
             parameterName,
             description: props.description ?? '',
             stringValue,
-            type: props.type ?? ParameterType.STRING,
             tier: props.tier ?? ParameterTier.STANDARD,
             allowedPattern: props.allowedPattern,
         });
@@ -221,29 +216,6 @@ export class ParameterStore extends Construct {
     ): ParameterStore {
         return new ParameterStore(scope, id, {
             ...props,
-            stack: {
-                config: { parameterNamePrefix: '' },
-                tags: props.stack.tags,
-            },
-        });
-    }
-
-    /**
-     * Creates a secure string parameter with simplified props
-     * 
-     * @param scope - The construct scope
-     * @param id - Unique identifier
-     * @param props - Simplified props without parameterNamePrefix requirement
-     * @returns A new ParameterStore instance
-     */
-    static secureString(
-        scope: Construct,
-        id: string,
-        props: Omit<ParameterStoreProps, 'stack' | 'type'> & { stack: { id: string; tags: ReadonlyArray<{ key: string; value: string }> } }
-    ): ParameterStore {
-        return new ParameterStore(scope, id, {
-            ...props,
-            type: ParameterType.SECURE_STRING,
             stack: {
                 config: { parameterNamePrefix: '' },
                 tags: props.stack.tags,

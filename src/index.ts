@@ -48,6 +48,9 @@ export {
     AccountTakeoverActionType,
     CompromisedCredentialsActionType,
 } from './Cognito.js';
+
+// Re-export CDK types for threat protection
+export { StandardThreatProtectionMode, CustomThreatProtectionMode } from 'aws-cdk-lib/aws-cognito';
 export type {
     CognitoProps,
     MfaConfig,

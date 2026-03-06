@@ -176,21 +176,31 @@ Both templates include:
 
 AWS Cognito Advanced Security features provide risk-based adaptive authentication, account takeover prevention, and compromised credentials detection.
 
-### Advanced Security Modes
+### Threat Protection Modes
 
-- **OFF** - Advanced security is completely disabled (default)
-- **AUDIT** - Logs security events but doesn't take action (useful for testing)
-- **ENFORCED** - Takes action based on risk detection
+Cognito offers two types of threat protection based on your feature plan:
+
+#### Standard Threat Protection (ESSENTIALS Feature Plan)
+
+- **NO_ENFORCEMENT** - Cognito doesn't gather metrics or take preventative actions (default)
+- **AUDIT_ONLY** - Cognito gathers metrics but doesn't take automatic action (useful for testing)
+- **FULL_FUNCTION** - Cognito takes preventative actions based on risk levels
+
+#### Custom Threat Protection (PLUS Feature Plan)
+
+- **AUDIT_ONLY** - Cognito gathers metrics but doesn't take automatic action
+- **FULL_FUNCTION** - Cognito takes preventative actions with custom risk configurations
 
 ### Basic Configuration
 
 ```typescript
-import { Cognito, AdvancedSecurityMode } from '@designofadecade/cdk-constructs';
+import { Cognito, StandardThreatProtectionMode } from '@designofadecade/cdk-constructs';
 
 const auth = new Cognito(this, 'Auth', {
   stack: { id: 'my-app', label: 'My App', tags: [] },
+  featurePlan: Cognito.FeaturePlan.ESSENTIALS,
   threatProtection: {
-    advancedSecurityMode: AdvancedSecurityMode.ENFORCED,
+    standardThreatProtectionMode: StandardThreatProtectionMode.FULL_FUNCTION,
   },
 });
 ```
@@ -202,14 +212,15 @@ Configure different actions for different risk levels:
 ```typescript
 import { 
   Cognito, 
-  AdvancedSecurityMode,
+  StandardThreatProtectionMode,
   AccountTakeoverActionType 
 } from '@designofadecade/cdk-constructs';
 
 const auth = new Cognito(this, 'Auth', {
   stack: { id: 'my-app', label: 'My App', tags: [] },
+  featurePlan: Cognito.FeaturePlan.ESSENTIALS,
   threatProtection: {
-    advancedSecurityMode: AdvancedSecurityMode.ENFORCED,
+    standardThreatProtectionMode: StandardThreatProtectionMode.FULL_FUNCTION,
     accountTakeoverRisk: {
       lowAction: {
         eventAction: AccountTakeoverActionType.NO_ACTION,
@@ -257,14 +268,15 @@ Automatically detect and block compromised credentials:
 ```typescript
 import { 
   Cognito, 
-  AdvancedSecurityMode,
+  CustomThreatProtectionMode,
   CompromisedCredentialsActionType 
 } from '@designofadecade/cdk-constructs';
 
 const auth = new Cognito(this, 'Auth', {
   stack: { id: 'my-app', label: 'My App', tags: [] },
+  featurePlan: Cognito.FeaturePlan.PLUS,
   threatProtection: {
-    advancedSecurityMode: AdvancedSecurityMode.ENFORCED,
+    customThreatProtectionMode: CustomThreatProtectionMode.FULL_FUNCTION,
     compromisedCredentialsRisk: {
       eventAction: CompromisedCredentialsActionType.BLOCK,
     },
@@ -277,13 +289,14 @@ const auth = new Cognito(this, 'Auth', {
 ```typescript
 import { 
   Cognito, 
-  AdvancedSecurityMode,
+  CustomThreatProtectionMode,
   AccountTakeoverActionType,
   CompromisedCredentialsActionType 
 } from '@designofadecade/cdk-constructs';
 
 const auth = new Cognito(this, 'Auth', {
   stack: { id: 'my-app', label: 'My App', tags: [] },
+  featurePlan: Cognito.FeaturePlan.PLUS, // PLUS plan required for custom threat protection
   mfa: {
     required: false, // MFA can be triggered by risk level
     mfaSecondFactor: {
@@ -297,7 +310,7 @@ const auth = new Cognito(this, 'Auth', {
     verifiedDomain: 'example.com',
   },
   threatProtection: {
-    advancedSecurityMode: AdvancedSecurityMode.ENFORCED,
+    customThreatProtectionMode: CustomThreatProtectionMode.FULL_FUNCTION,
     // Account takeover prevention
     accountTakeoverRisk: {
       lowAction: {
@@ -461,7 +474,7 @@ For maximum security, combine WAF (network-level protection) with Cognito's Adva
 import { 
   Cognito, 
   Waf,
-  AdvancedSecurityMode,
+  CustomThreatProtectionMode,
   AccountTakeoverActionType 
 } from '@designofadecade/cdk-constructs';
 
@@ -476,9 +489,10 @@ const waf = new Waf(this, 'CognitoWAF', {
   stack: { id: 'my-app', tags: [] },
 });
 
-// Application-level protection with Advanced Security
+// Application-level protection with threat protection
 const auth = new Cognito(this, 'Auth', {
   stack: { id: 'my-app', label: 'My App', tags: [] },
+  featurePlan: Cognito.FeaturePlan.PLUS,
   mfa: {
     required: false,
     mfaSecondFactor: { sms: false, otp: true, email: true },
@@ -487,9 +501,9 @@ const auth = new Cognito(this, 'Auth', {
   // WAF for network-level protection
   waf: waf,
   
-  // Advanced Security for application-level protection
+  // Custom Threat Protection for application-level protection
   threatProtection: {
-    advancedSecurityMode: AdvancedSecurityMode.ENFORCED,
+    customThreatProtectionMode: CustomThreatProtectionMode.FULL_FUNCTION,
     accountTakeoverRisk: {
       lowAction: {
         eventAction: AccountTakeoverActionType.NO_ACTION,

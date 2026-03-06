@@ -167,6 +167,53 @@ Monitoring.googleChatNotifier({
 })
 ```
 
+#### Secure Webhook URLs with Systems Manager Parameter Store
+
+**Recommended approach**: Store webhook URLs in AWS Systems Manager Parameter Store instead of hardcoding them. The Lambda functions will fetch the webhook URL at runtime.
+
+**Benefits:**
+- ✅ No secrets in CDK code or environment variables
+- ✅ Supports SecureString parameters (encrypted at rest)
+- ✅ Easy to rotate webhooks without CDK deployment
+- ✅ IAM permissions automatically granted
+
+**Setup:**
+
+1. Create a parameter in Systems Manager (can be String or SecureString):
+```bash
+aws ssm put-parameter \
+  --name "/myapp/slack-webhook" \
+  --value "https://hooks.slack.com/services/YOUR/WEBHOOK/URL" \
+  --type "SecureString" \
+  --description "Slack webhook for production alerts"
+```
+
+2. Use the parameter ARN in your notifier:
+```typescript
+const monitoring = new Monitoring(this, 'Monitoring', {
+  notifications: [
+    // Slack with parameter ARN (recommended)
+    Monitoring.slackNotifier({
+      webhookParameterArn: 'arn:aws:ssm:us-east-1:123456789012:parameter/myapp/slack-webhook',
+      slackChannel: '#alerts',
+    }),
+    // Teams with parameter ARN
+    Monitoring.teamsNotifier({
+      webhookParameterArn: 'arn:aws:ssm:us-east-1:123456789012:parameter/myapp/teams-webhook',
+    }),
+    // Google Chat with parameter ARN
+    Monitoring.googleChatNotifier({
+      webhookParameterArn: 'arn:aws:ssm:us-east-1:123456789012:parameter/myapp/gchat-webhook',
+    }),
+  ],
+});
+```
+
+**Note:** The construct automatically grants the Lambda functions `ssm:GetParameter` permission for the specified parameter ARN. Both String and SecureString parameter types are supported (SecureString values are automatically decrypted).
+
+You can also continue using direct webhook URLs (the old way) by passing `slackWebhookUrl` or `webhookUrl` properties, but the parameter ARN approach is more secure.
+```
+
 ### 3. Real-Time Error Monitoring with monitorErrors()
 
 The `monitorErrors()` method creates CloudWatch subscription filters that instantly detect and notify you of errors in your logs. This is faster than metric-based alarms because it sends notifications immediately when errors occur.

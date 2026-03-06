@@ -1,6 +1,6 @@
 import type { SNSEvent } from 'aws-lambda';
+import { SSMClient, GetParameterCommand } from '@aws-sdk/client-ssm';
 import * as https from 'https';
-import * as url from 'url';
 
 interface CloudWatchAlarmMessage {
     AlarmName?: string;
@@ -22,13 +22,53 @@ interface ErrorLogMessage {
     formattedMessage?: string;
 }
 
-export const handler = async (event: SNSEvent): Promise<{ statusCode: number; body: string }> => {
-    const webhookUrl = process.env.WEBHOOK_URL;
-    const messagePrefix = process.env.MESSAGE_PREFIX || '';
+// Cache the webhook URL to avoid repeated SSM calls
+let cachedWebhookUrl: string | null = null;
 
-    if (!webhookUrl) {
-        throw new Error('WEBHOOK_URL environment variable is required');
+// Helper function to get webhook URL from SSM or environment variable
+async function getWebhookUrl(): Promise<string> {
+    // Return cached value if available
+    if (cachedWebhookUrl) {
+        return cachedWebhookUrl;
     }
+
+    const directUrl = process.env.WEBHOOK_URL;
+    const parameterArn = process.env.WEBHOOK_PARAMETER_ARN;
+
+    if (directUrl) {
+        cachedWebhookUrl = directUrl;
+        return cachedWebhookUrl;
+    }
+
+    if (parameterArn) {
+        const client = new SSMClient({});
+        // Extract parameter name from ARN: arn:aws:ssm:region:account:parameter/name
+        const match = parameterArn.match(/parameter\/(.+)$/);
+        if (!match) {
+            throw new Error(`Invalid parameter ARN format: ${parameterArn}`);
+        }
+        const parameterName = `/${match[1]}`;
+
+        const command = new GetParameterCommand({
+            Name: parameterName,
+            WithDecryption: true,
+        });
+
+        const response = await client.send(command);
+        if (!response.Parameter?.Value) {
+            throw new Error(`Failed to retrieve parameter: ${parameterName}`);
+        }
+
+        cachedWebhookUrl = response.Parameter.Value;
+        return cachedWebhookUrl;
+    }
+
+    throw new Error('Either WEBHOOK_URL or WEBHOOK_PARAMETER_ARN environment variable is required');
+}
+
+export const handler = async (event: SNSEvent): Promise<{ statusCode: number; body: string }> => {
+    const webhookUrl = await getWebhookUrl();
+    const messagePrefix = process.env.MESSAGE_PREFIX || '';
 
     const message = event.Records[0].Sns;
     const body = message.Message;
@@ -204,13 +244,13 @@ export const handler = async (event: SNSEvent): Promise<{ statusCode: number; bo
         };
     }
 
-    const parsedUrl = url.parse(webhookUrl);
+    const parsedUrl = new URL(webhookUrl);
     const postData = JSON.stringify(teamsMessage);
 
     const options: https.RequestOptions = {
         hostname: parsedUrl.hostname,
         port: 443,
-        path: parsedUrl.path,
+        path: parsedUrl.pathname + parsedUrl.search,
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -223,10 +263,10 @@ export const handler = async (event: SNSEvent): Promise<{ statusCode: number; bo
             let responseBody = '';
             res.on('data', (chunk) => (responseBody += chunk));
             res.on('end', () => {
-                if (res.statusCode === 200) {
+                if (res.statusCode === 200 || res.statusCode === 202) {
                     resolve({ statusCode: 200, body: 'Sent to Teams' });
                 } else {
-                    reject(new Error(`Failed to send to Teams: ${res.statusCode}`));
+                    reject(new Error(`Failed to send to Teams: ${res.statusCode} - ${responseBody}`));
                 }
             });
         });

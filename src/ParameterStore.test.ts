@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { App, Stack } from 'aws-cdk-lib';
 import { Template } from 'aws-cdk-lib/assertions';
 import { ParameterStore } from './ParameterStore';
-import { ParameterType, ParameterTier } from 'aws-cdk-lib/aws-ssm';
+import { ParameterTier } from 'aws-cdk-lib/aws-ssm';
 import { Role, ServicePrincipal } from 'aws-cdk-lib/aws-iam';
 
 describe('ParameterStore', () => {
@@ -50,29 +50,6 @@ describe('ParameterStore', () => {
             Name: '/prod//app/config',
             Value: '{"timeout":30,"retries":3}',
             Type: 'String',
-        });
-    });
-
-    it('creates a secure string parameter', () => {
-        const app = new App();
-        const stack = new Stack(app, 'TestStack');
-
-        new ParameterStore(stack, 'TestParameter', {
-            name: '/app/secret',
-            value: 'secret-value',
-            type: ParameterType.SECURE_STRING,
-            stack: {
-                config: { parameterNamePrefix: '/prod/' },
-                tags: [],
-            },
-        });
-
-        const template = Template.fromStack(stack);
-
-        template.hasResourceProperties('AWS::SSM::Parameter', {
-            Name: '/prod//app/secret',
-            Value: 'secret-value',
-            Type: 'SecureString',
         });
     });
 
@@ -343,25 +320,6 @@ describe('ParameterStore', () => {
                 Name: '/app/config',
                 Value: 'test-value',
                 Type: 'String',
-            });
-        });
-
-        it('creates parameter using secureString() helper', () => {
-            const app = new App();
-            const stack = new Stack(app, 'TestStack');
-
-            ParameterStore.secureString(stack, 'TestParameter', {
-                name: '/app/secret',
-                value: 'secret-value',
-                stack: { id: 'test', tags: [] },
-            });
-
-            const template = Template.fromStack(stack);
-
-            template.hasResourceProperties('AWS::SSM::Parameter', {
-                Name: '/app/secret',
-                Value: 'secret-value',
-                Type: 'SecureString',
             });
         });
 
