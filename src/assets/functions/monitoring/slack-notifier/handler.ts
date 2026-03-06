@@ -32,6 +32,7 @@ export const handler = async (event: SNSEvent): Promise<{ statusCode: number; bo
     const message = event.Records[0].Sns;
     const subject = message.Subject || 'AWS Notification';
     const body = message.Message;
+    const region = process.env.AWS_REGION || 'us-east-1';
 
     let parsedBody: CloudWatchAlarmMessage | CloudWatchLogMessage;
     try {
@@ -50,6 +51,11 @@ export const handler = async (event: SNSEvent): Promise<{ statusCode: number; bo
             logMsg.errorLevel === 'FATAL' || logMsg.errorLevel === 'CRITICAL'
                 ? '#8B0000' // Dark red for critical
                 : 'danger'; // Red for errors
+
+        // Build CloudWatch Logs console URL
+        const logGroupEncoded = encodeURIComponent(logMsg.logGroup || '');
+        const logStreamEncoded = encodeURIComponent(logMsg.logStream || '');
+        const cloudwatchUrl = `https://${region}.console.aws.amazon.com/cloudwatch/home?region=${region}#logsV2:log-groups/log-group/${logGroupEncoded}/log-events/${logStreamEncoded}`;
 
         const fields: { title: string; value: string; short: boolean }[] = [
             { title: 'Level', value: logMsg.errorLevel, short: true },
@@ -83,6 +89,13 @@ export const handler = async (event: SNSEvent): Promise<{ statusCode: number; bo
                     fields,
                     footer: 'CloudWatch Logs',
                     ts: Math.floor(Date.parse(logMsg.timestamp) / 1000),
+                    actions: [
+                        {
+                            type: 'button',
+                            text: 'View in CloudWatch Logs',
+                            url: cloudwatchUrl,
+                        },
+                    ],
                 },
             ],
         };
@@ -93,6 +106,10 @@ export const handler = async (event: SNSEvent): Promise<{ statusCode: number; bo
         const newState = alarmMsg.NewStateValue || 'ALARM';
         const reason = alarmMsg.NewStateReason || 'No reason provided';
         const timestamp = alarmMsg.StateChangeTime || new Date().toISOString();
+
+        // Build CloudWatch Alarms console URL
+        const alarmNameEncoded = encodeURIComponent(alarmName);
+        const cloudwatchUrl = `https://${region}.console.aws.amazon.com/cloudwatch/home?region=${region}#alarmsV2:alarm/${alarmNameEncoded}`;
 
         const color = newState === 'ALARM' ? 'danger' : newState === 'OK' ? 'good' : 'warning';
 
@@ -111,6 +128,13 @@ export const handler = async (event: SNSEvent): Promise<{ statusCode: number; bo
                     ],
                     footer: 'AWS CloudWatch Alarms',
                     ts: Math.floor(Date.parse(timestamp) / 1000),
+                    actions: [
+                        {
+                            type: 'button',
+                            text: 'View in CloudWatch',
+                            url: cloudwatchUrl,
+                        },
+                    ],
                 },
             ],
         };

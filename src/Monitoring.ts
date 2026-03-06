@@ -21,6 +21,7 @@ export interface NotificationHandler {
     readonly webhookUrl: string;
     readonly channel?: string;
     readonly messagePrefix?: string;
+    readonly functionName?: string;
 }
 
 /**
@@ -41,6 +42,11 @@ export interface MonitoringProps {
      * Notification handlers to add to the topic
      */
     readonly notifications?: NotificationHandler[];
+
+    /**
+     * Optional name for the shared log error processing function
+     */
+    readonly logErrorFunctionName?: string;
 }
 
 /**
@@ -140,8 +146,14 @@ export class Monitoring extends Construct {
      */
     private logErrorFunction?: IFunction;
 
+    /**
+     * Configuration props stored for lazy initialization
+     */
+    private readonly props?: MonitoringProps;
+
     constructor(scope: Construct, id: string, props?: MonitoringProps) {
         super(scope, id);
+        this.props = props;
 
         // Create SNS topic
         this.topic = new Topic(this, 'Topic', {
@@ -185,6 +197,7 @@ export class Monitoring extends Construct {
             runtime: Runtime.NODEJS_24_X,
             handler: 'handler.handler',
             code: Code.fromAsset(join(__dirname, 'assets/functions/monitoring/slack-notifier')),
+            functionName: config.functionName,
             environment: {
                 SLACK_WEBHOOK_URL: config.webhookUrl,
                 SLACK_CHANNEL: config.channel ?? '',
@@ -202,6 +215,7 @@ export class Monitoring extends Construct {
             runtime: Runtime.NODEJS_24_X,
             handler: 'handler.handler',
             code: Code.fromAsset(join(__dirname, 'assets/functions/monitoring/teams-notifier')),
+            functionName: config.functionName,
             environment: {
                 WEBHOOK_URL: config.webhookUrl,
                 MESSAGE_PREFIX: config.messagePrefix ?? '',
@@ -218,6 +232,7 @@ export class Monitoring extends Construct {
             runtime: Runtime.NODEJS_24_X,
             handler: 'handler.handler',
             code: Code.fromAsset(join(__dirname, 'assets/functions/monitoring/googlechat-notifier')),
+            functionName: config.functionName,
             environment: {
                 WEBHOOK_URL: config.webhookUrl,
                 MESSAGE_PREFIX: config.messagePrefix ?? '',
@@ -236,6 +251,7 @@ export class Monitoring extends Construct {
                 runtime: Runtime.NODEJS_24_X,
                 handler: 'handler.handler',
                 code: Code.fromAsset(join(__dirname, 'assets/functions/monitoring/log-error-notifier')),
+                functionName: this.props?.logErrorFunctionName,
                 environment: {
                     SNS_TOPIC_ARN: this.topic.topicArn,
                 },
@@ -401,12 +417,14 @@ export class Monitoring extends Construct {
         slackWebhookUrl: string;
         slackChannel?: string;
         messagePrefix?: string;
+        functionName?: string;
     }): NotificationHandler {
         return {
             type: 'slack',
             webhookUrl: config.slackWebhookUrl,
             channel: config.slackChannel,
             messagePrefix: config.messagePrefix,
+            functionName: config.functionName,
         };
     }
 
@@ -416,11 +434,13 @@ export class Monitoring extends Construct {
     static teamsNotifier(config: {
         webhookUrl: string;
         messagePrefix?: string;
+        functionName?: string;
     }): NotificationHandler {
         return {
             type: 'teams',
             webhookUrl: config.webhookUrl,
             messagePrefix: config.messagePrefix,
+            functionName: config.functionName,
         };
     }
 
@@ -430,11 +450,13 @@ export class Monitoring extends Construct {
     static googleChatNotifier(config: {
         webhookUrl: string;
         messagePrefix?: string;
+        functionName?: string;
     }): NotificationHandler {
         return {
             type: 'googlechat',
             webhookUrl: config.webhookUrl,
             messagePrefix: config.messagePrefix,
+            functionName: config.functionName,
         };
     }
 }

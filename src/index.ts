@@ -37,6 +37,9 @@ export type { FunctionProps, AssetConfig, FunctionUrlConfig, FunctionUrlAuthType
 export { Secrets } from './Secrets.js';
 export type { SecretsProps } from './Secrets.js';
 
+export { ParameterStore } from './ParameterStore.js';
+export type { ParameterStoreProps } from './ParameterStore.js';
+
 export {
     Cognito,
     PasswordPolicyPlan,

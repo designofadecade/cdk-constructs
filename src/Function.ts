@@ -16,6 +16,7 @@ import {
 import { SecurityGroup, type IVpc, type ISecurityGroup } from 'aws-cdk-lib/aws-ec2';
 import { BucketDeployment, Source } from 'aws-cdk-lib/aws-s3-deployment';
 import type { IBucket } from 'aws-cdk-lib/aws-s3';
+import type { ILogGroup } from 'aws-cdk-lib/aws-logs';
 import { basename, dirname, isAbsolute, normalize, resolve } from 'node:path';
 
 /**
@@ -494,11 +495,20 @@ export class Function extends Construct {
     }
 
     /**
+     * Gets the CloudWatch log group for the function
+     */
+    get logGroup(): ILogGroup {
+        // The concrete function types (NodejsFunction and LambdaFunction) both have logGroup
+        const concreteFunction = this.#fn as NodejsFunction | LambdaFunction;
+        return concreteFunction.logGroup;
+    }
+
+    /**
      * Adds the AWS Parameters and Secrets Lambda Extension layer
      * 
      * This layer allows the function to retrieve parameters and secrets
      * via HTTP requests to localhost instead of SDK calls.
-     */
+     */ 
     addParametersSecretsExtensionLayer(): void {
         if (this.#fn instanceof LambdaFunction) {
             this.#fn.addLayers(

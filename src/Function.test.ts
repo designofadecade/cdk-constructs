@@ -105,6 +105,20 @@ describe('Function', () => {
         expect(func.functionName).toBe('test-function');
     });
 
+    it('exposes log group', () => {
+        const app = new App();
+        const stack = new Stack(app, 'TestStack');
+
+        const func = new Function(stack, 'TestFunction', {
+            code: Code.fromInline('exports.handler = async () => ({ statusCode: 200 })'),
+            name: 'test-function',
+            stack: { id: 'test', tags: [] },
+        });
+
+        expect(func.logGroup).toBeDefined();
+        expect(func.logGroup.logGroupName).toBeDefined();
+    });
+
     it('sets reserved concurrent executions', () => {
         const app = new App();
         const stack = new Stack(app, 'TestStack');
