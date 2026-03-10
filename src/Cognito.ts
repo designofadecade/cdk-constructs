@@ -1251,7 +1251,7 @@ export class Cognito extends Construct {
      */
     static CallbackAuthFunctionEntryPath(): string {
         const __dirname = dirname(fileURLToPath(import.meta.url));
-        return resolve(__dirname, './assets/functions/cognito-auth-callback/handler.js');
+        return resolve(__dirname, './assets/functions/cognito/auth-callback/handler.js');
     }
 
     /**
@@ -1259,7 +1259,7 @@ export class Cognito extends Construct {
      */
     static CallbackSignOutFunctionEntryPath(): string {
         const __dirname = dirname(fileURLToPath(import.meta.url));
-        return resolve(__dirname, './assets/functions/cognito-signout-callback/handler.js');
+        return resolve(__dirname, './assets/functions/cognito/signout-callback/handler.js');
     }
 
     /**
@@ -1267,7 +1267,7 @@ export class Cognito extends Construct {
      */
     static HttpApiAuthorizationFunctionEntryPath(): string {
         const __dirname = dirname(fileURLToPath(import.meta.url));
-        return resolve(__dirname, './assets/functions/cognito-auth-http-api-authorization/handler.js');
+        return resolve(__dirname, './assets/functions/cognito/auth-http-api-authorization/handler.js');
     }
 
     /**
@@ -1275,7 +1275,7 @@ export class Cognito extends Construct {
      */
     static PreTokenGenerationFunctionEntryPath(): string {
         const __dirname = dirname(fileURLToPath(import.meta.url));
-        return resolve(__dirname, './assets/functions/cognito-pre-token-generation/handler.js');
+        return resolve(__dirname, './assets/functions/cognito/pre-token-generation/handler.js');
     }
 
     /**
@@ -1283,7 +1283,7 @@ export class Cognito extends Construct {
      */
     static CustomMessageFunctionEntryPath(): string {
         const __dirname = dirname(fileURLToPath(import.meta.url));
-        return resolve(__dirname, './assets/functions/cognito-custom-message/handler.js');
+        return resolve(__dirname, './assets/functions/cognito/custom-message/handler.js');
     }
 
     /**
@@ -1291,7 +1291,7 @@ export class Cognito extends Construct {
      */
     static TokenRefreshFunctionEntryPath(): string {
         const __dirname = dirname(fileURLToPath(import.meta.url));
-        return resolve(__dirname, './assets/functions/cognito-auth-token-refresh/handler.js');
+        return resolve(__dirname, './assets/functions/cognito/auth-token-refresh/handler.js');
     }
 
     /**

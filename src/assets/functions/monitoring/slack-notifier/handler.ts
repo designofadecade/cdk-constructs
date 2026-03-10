@@ -139,17 +139,17 @@ export const handler = async (event: SNSEvent): Promise<{ statusCode: number; bo
         const color = severity >= 7 ? 'danger' : severity >= 4 ? 'warning' : '#FFD700';
 
         const fields: { title: string; value: string; short: boolean }[] = [
-            { title: 'Severity', value: `${severityLabel} (${severity})`, short: true },
-            { title: 'Type', value: finding.type || 'Unknown', short: true },
-            { title: 'Account', value: finding.accountId || ebMessage.account || 'Unknown', short: true },
-            { title: 'Region', value: finding.region || ebMessage.region || 'Unknown', short: true },
+            { title: 'Severity', value: `${severityLabel} (${severity})`, short: false },
+            { title: 'Type', value: finding.type || 'Unknown', short: false },
+            { title: 'Account', value: finding.accountId || ebMessage.account || 'Unknown', short: false },
+            { title: 'Region', value: finding.region || ebMessage.region || 'Unknown', short: false },
         ];
 
         if (finding.service?.eventFirstSeen) {
-            fields.push({ title: 'First Seen', value: finding.service.eventFirstSeen, short: true });
+            fields.push({ title: 'First Seen', value: finding.service.eventFirstSeen, short: false });
         }
         if (finding.service?.count) {
-            fields.push({ title: 'Count', value: String(finding.service.count), short: true });
+            fields.push({ title: 'Count', value: String(finding.service.count), short: false });
         }
 
         slackMessage = {
@@ -190,8 +190,8 @@ export const handler = async (event: SNSEvent): Promise<{ statusCode: number; bo
         const cloudwatchUrl = `https://${region}.console.aws.amazon.com/cloudwatch/home?region=${region}#logsV2:log-groups/log-group/${logGroupEncoded}/log-events/${logStreamEncoded}`;
 
         const fields: { title: string; value: string; short: boolean }[] = [
-            { title: 'Level', value: logMsg.errorLevel, short: true },
-            { title: 'Time', value: logMsg.timestamp, short: true },
+            { title: 'Level', value: logMsg.errorLevel, short: false },
+            { title: 'Time', value: logMsg.timestamp, short: false },
             { title: 'Log Group', value: logMsg.logGroup, short: false },
             { title: 'Log Stream', value: logMsg.logStream, short: false },
         ];
@@ -204,7 +204,7 @@ export const handler = async (event: SNSEvent): Promise<{ statusCode: number; bo
                     const value = typeof logMsg.additionalData![key] === 'object'
                         ? JSON.stringify(logMsg.additionalData![key])
                         : String(logMsg.additionalData![key]);
-                    fields.push({ title: key, value, short: true });
+                    fields.push({ title: key, value, short: false });
                 }
             });
         }
@@ -255,8 +255,8 @@ export const handler = async (event: SNSEvent): Promise<{ statusCode: number; bo
                     title: `${messagePrefix} ${alarmName}`,
                     text: reason,
                     fields: [
-                        { title: 'State', value: newState, short: true },
-                        { title: 'Time', value: timestamp, short: true },
+                        { title: 'State', value: newState, short: false },
+                        { title: 'Time', value: timestamp, short: false },
                     ],
                     footer: 'AWS CloudWatch Alarms',
                     ts: Math.floor(Date.parse(timestamp) / 1000),
