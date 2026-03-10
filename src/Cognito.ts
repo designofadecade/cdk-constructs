@@ -504,6 +504,14 @@ export interface PasswordPolicyConfig {
      * @default 0 for BASIC/STANDARD, 5 for STRONG, 10 for ENTERPRISE
      */
     readonly passwordHistorySize?: number;
+
+    /**
+     * Number of days before password expires and must be reset
+     * When configured, users will be required to reset their password after this many days
+     * Requires Lambda triggers and a custom attribute to track password changes
+     * @default undefined (no expiration)
+     */
+    readonly passwordExpirationDays?: number;
 }
 
 /**
@@ -783,6 +791,16 @@ export class Cognito extends Construct {
     constructor(scope: Construct, id: string, props: CognitoProps) {
         super(scope, id);
 
+        // Prepare custom attributes, adding password expiration tracking if needed
+        const customAttributes = { ...(props.customAttributes ?? {}) };
+        if (props.passwordPolicy?.passwordExpirationDays) {
+            customAttributes['last-password-change'] = new StringAttribute({
+                minLen: 1,
+                maxLen: 30,
+                mutable: true,
+            });
+        }
+
         this.#userPool = new UserPool(this, 'UserPool', {
             userPoolName: props.stack.label,
             featurePlan: props.featurePlan ?? FeaturePlan.ESSENTIALS,
@@ -806,7 +824,7 @@ export class Cognito extends Construct {
                     mutable: false,
                 },
             },
-            customAttributes: props.customAttributes ?? undefined,
+            customAttributes: Object.keys(customAttributes).length > 0 ? customAttributes : undefined,
             lambdaTriggers: props.lambdaTriggers ?? {},
             email: props.sesEmail
                 ? UserPoolEmail.withSES({
@@ -1292,6 +1310,33 @@ export class Cognito extends Construct {
     static TokenRefreshFunctionEntryPath(): string {
         const __dirname = dirname(fileURLToPath(import.meta.url));
         return resolve(__dirname, './assets/functions/cognito/auth-token-refresh/handler.js');
+    }
+
+    /**
+     * Gets the entry path for the password expiration pre-authentication function
+     * Use this Lambda to check if a user's password has expired before authentication
+     */
+    static PasswordExpirationPreAuthFunctionEntryPath(): string {
+        const __dirname = dirname(fileURLToPath(import.meta.url));
+        return resolve(__dirname, './assets/functions/cognito/password-expiration/pre-auth-handler.js');
+    }
+
+    /**
+     * Gets the entry path for the password expiration post-authentication function
+     * Use this Lambda to initialize the password change timestamp on first login
+     */
+    static PasswordExpirationPostAuthFunctionEntryPath(): string {
+        const __dirname = dirname(fileURLToPath(import.meta.url));
+        return resolve(__dirname, './assets/functions/cognito/password-expiration/post-auth-handler.js');
+    }
+
+    /**
+     * Gets the entry path for the password expiration post-confirmation function
+     * Use this Lambda to update the password change timestamp when password is reset
+     */
+    static PasswordExpirationPostConfirmationFunctionEntryPath(): string {
+        const __dirname = dirname(fileURLToPath(import.meta.url));
+        return resolve(__dirname, './assets/functions/cognito/password-expiration/post-confirmation-handler.js');
     }
 
     /**

@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.11.0] - 2026-03-10
+
+### Added
+- **Password expiration support** for Cognito User Pools
+  - `passwordExpirationDays` property in `PasswordPolicyConfig` to force password resets after N days
+  - Automatic custom attribute `custom:last-password-change` to track password age
+  - Three Lambda triggers for password expiration enforcement:
+    - Pre-authentication trigger to block expired passwords
+    - Post-authentication trigger to initialize password timestamps
+    - Post-confirmation trigger to update timestamps on password resets
+  - Static helper methods for Lambda function entry paths:
+    - `Cognito.PasswordExpirationPreAuthFunctionEntryPath()`
+    - `Cognito.PasswordExpirationPostAuthFunctionEntryPath()`
+    - `Cognito.PasswordExpirationPostConfirmationFunctionEntryPath()`
+  - Comprehensive test coverage with 10 passing tests
+  - Full documentation with usage examples in [Cognito docs](./docs/Cognito.md#password-expiration)
+
+### Note
+- **Publishing**: This package auto-publishes to npm when pushed to GitHub with tags
+
 ## [1.10.0] - 2026-03-10
 
 ### Added

@@ -6,6 +6,7 @@ CDK construct for creating Amazon Cognito User Pools with authentication flows.
 
 - Email-based authentication
 - Configurable password policies with predefined plans
+- Password expiration with configurable days (requires Lambda triggers)
 - Optional MFA with multiple methods:
   - TOTP (Time-based One-Time Password)
   - SMS (text message)
@@ -89,6 +90,91 @@ const auth = new Cognito(this, 'Auth', {
 | `requireSymbols` | `boolean` | Varies by plan | Require special characters |
 | `tempPasswordValidityDays` | `number` | 7 (3 for ENTERPRISE) | Temporary password validity |
 | `passwordHistorySize` | `number` | 0-10 by plan | Number of passwords to remember |
+| `passwordExpirationDays` | `number` | `undefined` | Days before password expires (requires Lambda triggers) |
+
+## Password Expiration
+
+The construct supports password expiration, requiring users to reset their passwords after a specified number of days. This feature requires Lambda triggers to track and enforce password age.
+
+### Enabling Password Expiration
+
+```typescript
+import { Cognito, Function } from '@designofadecade/cdk-constructs';
+import { Runtime } from 'aws-cdk-lib/aws-lambda';
+
+// Step 1: Configure password expiration in the password policy
+const auth = new Cognito(this, 'Auth', {
+  stack: { id: 'my-app', label: 'My App', tags: [] },
+  passwordPolicy: {
+    plan: PasswordPolicyPlan.STANDARD,
+    passwordExpirationDays: 90, // Force password reset after 90 days
+  },
+  lambdaTriggers: {
+    // Step 2: Add Lambda triggers to enforce password expiration
+    preAuthentication: new Function(this, 'PreAuthFunction', {
+      stack: { id: 'my-app', label: 'My App', tags: [] },
+      entry: Cognito.PasswordExpirationPreAuthFunctionEntryPath(),
+      runtime: Runtime.NODEJS_22_X,
+      environment: {
+        PASSWORD_EXPIRATION_DAYS: '90',
+      },
+    }).function,
+    postAuthentication: new Function(this, 'PostAuthFunction', {
+      stack: { id: 'my-app', label: 'My App', tags: [] },
+      entry: Cognito.PasswordExpirationPostAuthFunctionEntryPath(),
+      runtime: Runtime.NODEJS_22_X,
+    }).function,
+    postConfirmation: new Function(this, 'PostConfirmFunction', {
+      stack: { id: 'my-app', label: 'My App', tags: [] },
+      entry: Cognito.PasswordExpirationPostConfirmationFunctionEntryPath(),
+      runtime: Runtime.NODEJS_22_X,
+    }).function,
+  },
+});
+```
+
+### How It Works
+
+Password expiration uses three Lambda triggers:
+
+1. **Pre-Authentication Trigger**: Checks if the password has expired before allowing sign-in. If expired, authentication is blocked with an error message.
+
+2. **Post-Authentication Trigger**: Initializes the password change timestamp on first login if it doesn't exist.
+
+3. **Post-Confirmation Trigger**: Updates the password change timestamp when users reset their password through the forgot password flow.
+
+The construct automatically adds a custom attribute `custom:last-password-change` to track when each user last changed their password.
+
+### Important Notes
+
+- **Custom Attribute**: Setting `passwordExpirationDays` automatically adds a `custom:last-password-change` custom attribute to the User Pool. This stores the timestamp of the last password change.
+
+- **Lambda Triggers Required**: Password expiration only works if you configure the three Lambda triggers shown above. The construct doesn't automatically create these to avoid conflicts with existing triggers.
+
+- **First Login**: Users won't be blocked on their first login. The timestamp is initialized during the first authentication.
+
+- **Password Resets**: The timestamp is updated when users complete the forgot password flow.
+
+- **Environment Variable**: The `PASSWORD_EXPIRATION_DAYS` environment variable must match the `passwordExpirationDays` value in your password policy.
+
+### Helper Methods
+
+The construct provides static methods to get the Lambda function entry paths:
+
+```typescript
+// Get entry paths for password expiration Lambda handlers
+Cognito.PasswordExpirationPreAuthFunctionEntryPath();
+Cognito.PasswordExpirationPostAuthFunctionEntryPath();
+Cognito.PasswordExpirationPostConfirmationFunctionEntryPath();
+```
+
+### Example Error Message
+
+When a user tries to sign in with an expired password, they'll see:
+
+```
+Your password has expired. It has been 91 days since your last password change. Please reset your password to continue.
+```
 
 ## MFA Configuration
 
