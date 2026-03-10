@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.9.0] - 2026-03-10
+
+### Added
+- **GuardDuty monitoring integration** for security threat detection
+  - `guardDuty` configuration option in Monitoring construct
+  - Automatic EventBridge rule creation for GuardDuty findings
+  - Configurable minimum severity levels: LOW, MEDIUM, HIGH, CRITICAL
+  - Direct integration with SNS topic for unified notification routing
+  - Static constants for severity levels: `GUARD_DUTY_MIN_SEVERITY_LOW`, `GUARD_DUTY_MIN_SEVERITY_MEDIUM`, `GUARD_DUTY_MIN_SEVERITY_HIGH`, `GUARD_DUTY_MIN_SEVERITY_CRITICAL`
+  - Numeric severity filtering based on AWS GuardDuty severity ranges
+  - Full documentation with examples and best practices
+
 ## [1.8.0] - 2026-03-06
 
 ### Changed
