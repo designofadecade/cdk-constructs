@@ -3,10 +3,14 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import type { PostAuthenticationTriggerEvent } from 'aws-lambda';
+import type { PostAuthenticationTriggerEvent, Context, Callback } from 'aws-lambda';
 import { handler } from './post-auth-handler.js';
 
 describe('Password Expiration Post-Auth Handler', () => {
+    // Helper to call handler with required 3-arg signature
+    const callHandler = (event: PostAuthenticationTriggerEvent) => {
+        return handler(event, {} as Context, (() => {}) as Callback<PostAuthenticationTriggerEvent>);
+    };
     it('should set last-password-change when attribute does not exist', async () => {
         const event: PostAuthenticationTriggerEvent = {
             version: '1',
@@ -27,7 +31,7 @@ describe('Password Expiration Post-Auth Handler', () => {
             response: {},
         };
 
-        const result = await handler(event);
+        const result = await callHandler(event);
 
         expect(result.response.claimsOverrideDetails).toBeDefined();
         expect(result.response.claimsOverrideDetails?.claimsToAddOrOverride).toBeDefined();
@@ -63,7 +67,7 @@ describe('Password Expiration Post-Auth Handler', () => {
             response: {},
         };
 
-        const result = await handler(event);
+        const result = await callHandler(event);
 
         // Should not set claimsOverrideDetails when attribute already exists
         expect(result.response.claimsOverrideDetails).toBeUndefined();

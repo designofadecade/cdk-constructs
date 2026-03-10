@@ -3,10 +3,14 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import type { PostConfirmationTriggerEvent } from 'aws-lambda';
+import type { PostConfirmationTriggerEvent, Context, Callback } from 'aws-lambda';
 import { handler } from './post-confirmation-handler.js';
 
 describe('Password Expiration Post-Confirmation Handler', () => {
+    // Helper to call handler with required 3-arg signature
+    const callHandler = (event: PostConfirmationTriggerEvent) => {
+        return handler(event, {} as Context, (() => {}) as Callback<PostConfirmationTriggerEvent>);
+    };
     it('should update last-password-change on forgot password confirmation', async () => {
         const event: PostConfirmationTriggerEvent = {
             version: '1',
@@ -27,7 +31,7 @@ describe('Password Expiration Post-Confirmation Handler', () => {
             response: {},
         };
 
-        const result = await handler(event);
+        const result = await callHandler(event);
 
         expect(result.response.claimsOverrideDetails).toBeDefined();
         expect(result.response.claimsOverrideDetails?.claimsToAddOrOverride).toBeDefined();
@@ -63,7 +67,7 @@ describe('Password Expiration Post-Confirmation Handler', () => {
             response: {},
         };
 
-        const result = await handler(event);
+        const result = await callHandler(event);
 
         expect(result.response.claimsOverrideDetails).toBeDefined();
         expect(result.response.claimsOverrideDetails?.claimsToAddOrOverride).toBeDefined();
@@ -97,7 +101,7 @@ describe('Password Expiration Post-Confirmation Handler', () => {
             response: {},
         } as unknown as PostConfirmationTriggerEvent;
 
-        const result = await handler(event);
+        const result = await callHandler(event);
 
         // Should not set claimsOverrideDetails for other trigger sources
         expect(result.response.claimsOverrideDetails).toBeUndefined();

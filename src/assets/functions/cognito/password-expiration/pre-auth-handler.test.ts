@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import type { PreAuthenticationTriggerEvent } from 'aws-lambda';
+import type { PreAuthenticationTriggerEvent, Context, Callback } from 'aws-lambda';
 import { handler } from './pre-auth-handler.js';
 
 describe('Password Expiration Pre-Auth Handler', () => {
@@ -11,6 +11,11 @@ describe('Password Expiration Pre-Auth Handler', () => {
         vi.resetModules();
         delete process.env.PASSWORD_EXPIRATION_DAYS;
     });
+
+    // Helper to call handler with required 3-arg signature
+    const callHandler = (event: PreAuthenticationTriggerEvent) => {
+        return handler(event, {} as Context, (() => {}) as Callback<PreAuthenticationTriggerEvent>);
+    };
 
     it('should allow authentication when password expiration is not configured', async () => {
         const event: PreAuthenticationTriggerEvent = {
@@ -34,7 +39,7 @@ describe('Password Expiration Pre-Auth Handler', () => {
             response: {},
         };
 
-        const result = await handler(event);
+        const result = await callHandler(event);
         expect(result).toEqual(event);
     });
 
@@ -61,7 +66,7 @@ describe('Password Expiration Pre-Auth Handler', () => {
             response: {},
         };
 
-        const result = await handler(event);
+        const result = await callHandler(event);
         expect(result).toEqual(event);
     });
 
@@ -90,7 +95,7 @@ describe('Password Expiration Pre-Auth Handler', () => {
             response: {},
         };
 
-        const result = await handler(event);
+        const result = await callHandler(event);
         expect(result).toEqual(event);
     });
 
@@ -119,7 +124,7 @@ describe('Password Expiration Pre-Auth Handler', () => {
             response: {},
         };
 
-        await expect(handler(event)).rejects.toThrow(/password has expired/i);
+        await expect(callHandler(event)).rejects.toThrow(/password has expired/i);
     });
 
     it('should block authentication on the exact expiration day', async () => {
@@ -147,6 +152,6 @@ describe('Password Expiration Pre-Auth Handler', () => {
             response: {},
         };
 
-        await expect(handler(event)).rejects.toThrow(/password has expired/i);
+        await expect(callHandler(event)).rejects.toThrow(/password has expired/i);
     });
 });
