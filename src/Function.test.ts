@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { App, Stack } from 'aws-cdk-lib';
 import { Template, Match } from 'aws-cdk-lib/assertions';
 import { Vpc } from 'aws-cdk-lib/aws-ec2';
-import { Code } from 'aws-cdk-lib/aws-lambda';
+import { Code, LambdaInsightsVersion } from 'aws-cdk-lib/aws-lambda';
 import { Function } from '../src/Function.js';
 
 describe('Function', () => {
@@ -220,5 +220,79 @@ describe('Function', () => {
                 stack: { id: 'test', tags: [] },
             });
         }).toThrow('targetUtilization must be between 0 and 1');
+    });
+
+    it('adds Lambda Insights layer when insightsVersion is specified', () => {
+        const app = new App();
+        const stack = new Stack(app, 'TestStack');
+
+        new Function(stack, 'TestFunction', {
+            code: Code.fromInline('exports.handler = async () => ({ statusCode: 200 })'),
+            name: 'test-function',
+            insightsVersion: LambdaInsightsVersion.fromInsightVersionArn(
+                'arn:aws:lambda:ca-central-1:580247275435:layer:LambdaInsightsExtension-Arm64:38'
+            ),
+            stack: { id: 'test', tags: [] },
+        });
+
+        const template = Template.fromStack(stack);
+        template.hasResourceProperties('AWS::Lambda::Function', {
+            Layers: [
+                'arn:aws:lambda:ca-central-1:580247275435:layer:LambdaInsightsExtension-Arm64:38',
+            ],
+        });
+    });
+
+    it('does not add Lambda Insights layer when insightsVersion is not specified', () => {
+        const app = new App();
+        const stack = new Stack(app, 'TestStack');
+
+        new Function(stack, 'TestFunction', {
+            code: Code.fromInline('exports.handler = async () => ({ statusCode: 200 })'),
+            name: 'test-function',
+            stack: { id: 'test', tags: [] },
+        });
+
+        const template = Template.fromStack(stack);
+        template.hasResourceProperties('AWS::Lambda::Function', {
+            Layers: Match.absent(),
+        });
+    });
+
+    it('uses LatestInsightsVersion helper', () => {
+        const app = new App();
+        const stack = new Stack(app, 'TestStack');
+
+        new Function(stack, 'TestFunction', {
+            code: Code.fromInline('exports.handler = async () => ({ statusCode: 200 })'),
+            name: 'test-function',
+            insightsVersion: Function.LatestInsightsVersion,
+            stack: { id: 'test', tags: [] },
+        });
+
+        const template = Template.fromStack(stack);
+        // VERSION_1_0_498_0 uses Fn::FindInMap for region-aware layer ARNs
+        template.hasResourceProperties('AWS::Lambda::Function', {
+            Layers: Match.anyValue(),
+        });
+    });
+
+    it('uses InsightsVersion helper with custom version', () => {
+        const app = new App();
+        const stack = new Stack(app, 'TestStack');
+
+        new Function(stack, 'TestFunction', {
+            code: Code.fromInline('exports.handler = async () => ({ statusCode: 200 })'),
+            name: 'test-function',
+            insightsVersion: Function.InsightsVersion(35),
+            stack: { id: 'test', tags: [] },
+        });
+
+        const template = Template.fromStack(stack);
+        template.hasResourceProperties('AWS::Lambda::Function', {
+            Layers: [
+                'arn:aws:lambda:ca-central-1:580247275435:layer:LambdaInsightsExtension-Arm64:35',
+            ],
+        });
     });
 });

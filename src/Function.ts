@@ -12,6 +12,7 @@ import {
     type FunctionUrl,
     Alias,
     type IScalableFunctionAttribute,
+    LambdaInsightsVersion,
 } from 'aws-cdk-lib/aws-lambda';
 import { SecurityGroup, type IVpc, type ISecurityGroup } from 'aws-cdk-lib/aws-ec2';
 import { BucketDeployment, Source } from 'aws-cdk-lib/aws-s3-deployment';
@@ -183,6 +184,34 @@ export interface FunctionProps {
      * @default undefined (no auto-scaling)
      */
     readonly autoScaling?: ProvisionedConcurrencyAutoScalingConfig;
+
+    /**
+     * Lambda Insights version
+     * 
+     * Enable enhanced monitoring for Lambda functions using CloudWatch Lambda Insights.
+     * Lambda Insights provides detailed metrics, logs, and traces for troubleshooting
+     * and optimizing Lambda function performance.
+     * 
+     * Use LambdaInsightsVersion constants for well-known versions, or create a custom
+     * version using LambdaInsightsVersion.fromInsightVersionArn().
+     * 
+     * Note: Lambda Insights incurs additional CloudWatch costs.
+     * 
+     * @default undefined (Lambda Insights not enabled)
+     * @see https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/Lambda-Insights.html
+     * 
+     * @example
+     * ```typescript
+     * // Use a predefined version
+     * insightsVersion: LambdaInsightsVersion.VERSION_1_0_229_0
+     * 
+     * // Use a custom ARM64 version (ca-central-1)
+     * insightsVersion: LambdaInsightsVersion.fromInsightVersionArn(
+     *   'arn:aws:lambda:ca-central-1:580247275435:layer:LambdaInsightsExtension-Arm64:38'
+     * )
+     * ```
+     */
+    readonly insightsVersion?: LambdaInsightsVersion;
 }
 
 /**
@@ -259,6 +288,14 @@ export interface CodeFromBucketProps {
  *   stack: { id: 'my-app', tags: [] },
  * });
  * 
+ * // Create a function with Lambda Insights
+ * const monitored = new Function(this, 'Monitored', {
+ *   name: 'monitored-function',
+ *   entry: './src/monitored.ts',
+ *   insightsVersion: Function.LatestInsightsVersion,
+ *   stack: { id: 'my-app', tags: [] },
+ * });
+ * 
  * // Add Parameters and Secrets Extension
  * fn.addParametersSecretsExtensionLayer();
  * ```
@@ -305,6 +342,7 @@ export class Function extends Construct {
                 memorySize: props.memorySize ?? 512,
                 timeout: Duration.seconds(props.timeoutSeconds ?? 30),
                 reservedConcurrentExecutions: props.reservedConcurrentExecutions,
+                insightsVersion: props.insightsVersion,
             });
         } else {
             const entryPath = props.entry ? props.entry.replace('file:/', '') : undefined;
@@ -374,6 +412,7 @@ export class Function extends Construct {
                 environment: props.environment,
                 bundling,
                 reservedConcurrentExecutions: props.reservedConcurrentExecutions,
+                insightsVersion: props.insightsVersion,
             });
         }
 
@@ -508,7 +547,7 @@ export class Function extends Construct {
      * 
      * This layer allows the function to retrieve parameters and secrets
      * via HTTP requests to localhost instead of SDK calls.
-     */ 
+     */
     addParametersSecretsExtensionLayer(): void {
         if (this.#fn instanceof LambdaFunction) {
             this.#fn.addLayers(
@@ -566,5 +605,52 @@ export class Function extends Construct {
         return Code.fromInline(`
             exports.handler = async () => ({ statusCode: 501, body: 'Placeholder' });
         `);
+    }
+
+    /**
+     * Gets the latest Lambda Insights version for ARM64 architecture
+     * 
+     * This is a convenience method that returns the latest known Lambda Insights version.
+     * Currently returns VERSION_1_0_498_0.
+     * 
+     * @returns LambdaInsightsVersion for the latest layer
+     * 
+     * @example
+     * ```typescript
+     * const fn = new Function(this, 'MonitoredFunction', {
+     *   name: 'monitored-function',
+     *   entry: './src/handler.ts',
+     *   insightsVersion: Function.LatestInsightsVersion,
+     *   stack: { id: 'my-app', tags: [] },
+     * });
+     * ```
+     */
+    static get LatestInsightsVersion(): LambdaInsightsVersion {
+        return LambdaInsightsVersion.VERSION_1_0_498_0;
+    }
+
+    /**
+     * Creates a Lambda Insights version for ARM64 architecture in ca-central-1
+     * 
+     * This is a convenience method for creating Lambda Insights versions with specific
+     * version numbers for the ARM64 architecture in the ca-central-1 region.
+     * 
+     * @param version - The Lambda Insights layer version number
+     * @returns LambdaInsightsVersion for the specified version
+     * 
+     * @example
+     * ```typescript
+     * const fn = new Function(this, 'MonitoredFunction', {
+     *   name: 'monitored-function',
+     *   entry: './src/handler.ts',
+     *   insightsVersion: Function.InsightsVersion(38),
+     *   stack: { id: 'my-app', tags: [] },
+     * });
+     * ```
+     */
+    static InsightsVersion(version: number): LambdaInsightsVersion {
+        return LambdaInsightsVersion.fromInsightVersionArn(
+            `arn:aws:lambda:ca-central-1:580247275435:layer:LambdaInsightsExtension-Arm64:${version}`,
+        );
     }
 }

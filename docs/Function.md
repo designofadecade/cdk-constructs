@@ -13,6 +13,7 @@ CDK construct for creating AWS Lambda functions with best practices built-in.
 - Function URL support
 - Reserved concurrency limits
 - Provisioned concurrency with auto-scaling
+- Lambda Insights for enhanced monitoring
 - Helper methods for common patterns
 
 ## Basic Usage
@@ -341,6 +342,70 @@ const fn = new Function(this, 'SecureFunction', {
 fn.addParametersSecretsExtensionLayer();
 ```
 
+### Lambda Insights
+
+Enable CloudWatch Lambda Insights for enhanced monitoring and troubleshooting:
+
+```typescript
+// Easiest: Use the latest version helper (recommended)
+const fn = new Function(this, 'MonitoredFunction', {
+  name: 'monitored-function',
+  entry: './src/handlers/monitored.ts',
+  insightsVersion: Function.LatestInsightsVersion,
+  stack: { id: 'my-app', tags: [] },
+});
+
+// Use a specific version number
+const fnVersion = new Function(this, 'SpecificVersion', {
+  name: 'specific-version',
+  entry: './src/handlers/specific.ts',
+  insightsVersion: Function.InsightsVersion(35),
+  stack: { id: 'my-app', tags: [] },
+});
+
+// Advanced: Use CDK's predefined versions
+import { LambdaInsightsVersion } from 'aws-cdk-lib/aws-lambda';
+
+const fnPredefined = new Function(this, 'PredefinedVersion', {
+  name: 'predefined-version',
+  entry: './src/handlers/predefined.ts',
+  insightsVersion: LambdaInsightsVersion.VERSION_1_0_229_0,
+  stack: { id: 'my-app', tags: [] },
+});
+
+// Advanced: Use a custom ARN for different regions/architectures
+const fnCustom = new Function(this, 'CustomMonitored', {
+  name: 'custom-monitored-function',
+  entry: './src/handlers/custom.ts',
+  insightsVersion: LambdaInsightsVersion.fromInsightVersionArn(
+    'arn:aws:lambda:us-east-1:580247275435:layer:LambdaInsightsExtension:21'
+  ),
+  stack: { id: 'my-app', tags: [] },
+});
+```
+
+**What Lambda Insights provides:**
+- Detailed performance metrics (CPU, memory, network)
+- Cold start detection and analysis
+- Automatic log ingestion and correlation
+- Enhanced error tracking
+- Performance anomaly detection
+
+**Cost considerations:**
+- Additional CloudWatch metrics charges apply
+- ~$0.30/month per function for typical usage
+- See [AWS Lambda Insights pricing](https://aws.amazon.com/cloudwatch/pricing/) for details
+
+**When to use:**
+- ✅ Production functions requiring detailed monitoring
+- ✅ Functions with performance issues or cold start problems
+- ✅ Functions processing critical workloads
+- ❌ Development/testing environments (unless debugging)
+- ❌ Low-priority background jobs
+
+**Finding the latest version:**
+Check the [AWS Lambda Insights documentation](https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/Lambda-Insights-extension-versionsx.html) for the latest layer ARN for your region and architecture.
+
 ### Code from S3 Bucket
 
 Deploy placeholder code initially, update later:
@@ -380,6 +445,7 @@ const fn = new Function(this, 'S3Function', {
 | `reservedConcurrentExecutions` | `number` | - | Maximum concurrent executions |
 | `provisionedConcurrentExecutions` | `number` | - | Pre-warmed instances |
 | `autoScaling` | `ProvisionedConcurrencyAutoScalingConfig` | - | Auto-scaling configuration |
+| `insightsVersion` | `LambdaInsightsVersion` | - | Lambda Insights version for enhanced monitoring |
 
 ### ProvisionedConcurrencyAutoScalingConfig
 
@@ -422,6 +488,32 @@ const code = Function.CodeFromBucket(
   'functions/my-function.zip',
   { objectVersion: 'v1' }
 );
+```
+
+### `Function.LatestInsightsVersion`
+
+Gets the latest Lambda Insights version (currently VERSION_1_0_498_0). This uses CDK's predefined version constant, which is portable across regions and architectures.
+
+```typescript
+const fn = new Function(this, 'MyFunction', {
+  name: 'my-function',
+  entry: './src/handler.ts',
+  insightsVersion: Function.LatestInsightsVersion,
+  stack: { id: 'my-app', tags: [] },
+});
+```
+
+### `Function.InsightsVersion(version)`
+
+Creates a Lambda Insights version for ARM64 architecture in ca-central-1 with a specific version number. Returns a function that generates the appropriate layer ARN.
+
+```typescript
+const fn = new Function(this, 'MyFunction', {
+  name: 'my-function',
+  entry: './src/handler.ts',
+  insightsVersion: Function.InsightsVersion(35),
+  stack: { id: 'my-app', tags: [] },
+});
 ```
 
 ## Best Practices Summary
