@@ -22,6 +22,42 @@ interface ErrorLogMessage {
     formattedMessage?: string;
 }
 
+interface GuardDutyFinding {
+    schemaVersion?: string;
+    accountId?: string;
+    region?: string;
+    partition?: string;
+    id?: string;
+    arn?: string;
+    type?: string;
+    resource?: any;
+    service?: {
+        serviceName?: string;
+        detectorId?: string;
+        action?: any;
+        eventFirstSeen?: string;
+        eventLastSeen?: string;
+        archived?: boolean;
+        count?: number;
+    };
+    severity?: number;
+    title?: string;
+    description?: string;
+    createdAt?: string;
+    updatedAt?: string;
+}
+
+interface EventBridgeMessage {
+    version?: string;
+    id?: string;
+    'detail-type'?: string;
+    source?: string;
+    account?: string;
+    time?: string;
+    region?: string;
+    detail?: GuardDutyFinding;
+}
+
 // Cache the webhook URL to avoid repeated SSM calls
 let cachedWebhookUrl: string | null = null;
 
@@ -74,7 +110,7 @@ export const handler = async (event: SNSEvent): Promise<{ statusCode: number; bo
     const body = message.Message;
     const region = process.env.AWS_REGION || 'us-east-1';
 
-    let parsedBody: CloudWatchAlarmMessage | ErrorLogMessage;
+    let parsedBody: CloudWatchAlarmMessage | ErrorLogMessage | EventBridgeMessage;
     try {
         parsedBody = JSON.parse(body);
     } catch (e) {
@@ -83,8 +119,73 @@ export const handler = async (event: SNSEvent): Promise<{ statusCode: number; bo
 
     let chatMessage: any;
 
+    // Check if this is a GuardDuty finding from EventBridge
+    if ('detail-type' in parsedBody && parsedBody['detail-type'] === 'GuardDuty Finding' && parsedBody.detail) {
+        const ebMessage = parsedBody as EventBridgeMessage;
+        const finding = ebMessage.detail!;
+
+        const severity = finding.severity || 0;
+        const severityLabel = severity >= 7 ? 'HIGH' : severity >= 4 ? 'MEDIUM' : 'LOW';
+        const emoji = severity >= 7 ? '🔴' : severity >= 4 ? '🟠' : '🟡';
+
+        // Build GuardDuty console URL
+        const findingId = finding.id || '';
+        const detectorId = finding.service?.detectorId || '';
+        const findingRegion = ebMessage.region || region;
+        const guardDutyUrl = detectorId && findingId
+            ? `https://${findingRegion}.console.aws.amazon.com/guardduty/home?region=${findingRegion}#/findings?search=id%3D${findingId}`
+            : `https://${findingRegion}.console.aws.amazon.com/guardduty/home?region=${findingRegion}`;
+
+        let messageText = `*${messagePrefix}${messagePrefix ? ' ' : ''}${emoji} GuardDuty Finding*\n\n`;
+        messageText += `*Title:* ${finding.title || 'Security Finding Detected'}\n`;
+        messageText += `*Description:* ${finding.description || 'No description available'}\n`;
+        messageText += `*Severity:* ${severityLabel} (${severity})\n`;
+        messageText += `*Type:* ${finding.type || 'Unknown'}\n`;
+        messageText += `*Account:* ${finding.accountId || ebMessage.account || 'Unknown'}\n`;
+        messageText += `*Region:* ${finding.region || ebMessage.region || 'Unknown'}\n`;
+        messageText += `*Time:* ${ebMessage.time || new Date().toISOString()}\n`;
+
+        if (finding.service?.eventFirstSeen) {
+            messageText += `*First Seen:* ${finding.service.eventFirstSeen}\n`;
+        }
+        if (finding.service?.count) {
+            messageText += `*Count:* ${finding.service.count}\n`;
+        }
+
+        chatMessage = {
+            text: messageText,
+            cards: [
+                {
+                    header: {
+                        title: `${emoji} GuardDuty Security Finding`,
+                        subtitle: `${severityLabel} Severity`,
+                    },
+                    sections: [
+                        {
+                            widgets: [
+                                {
+                                    buttons: [
+                                        {
+                                            textButton: {
+                                                text: 'VIEW IN GUARDDUTY',
+                                                onClick: {
+                                                    openLink: {
+                                                        url: guardDutyUrl,
+                                                    },
+                                                },
+                                            },
+                                        },
+                                    ],
+                                },
+                            ],
+                        },
+                    ],
+                },
+            ],
+        };
+    }
     // Check if this is an error log message from CloudWatch Logs
-    if ('source' in parsedBody && parsedBody.source === 'CloudWatchLogs') {
+    else if ('source' in parsedBody && parsedBody.source === 'CloudWatchLogs') {
         const errorLog = parsedBody as ErrorLogMessage;
         const emoji = errorLog.errorLevel === 'FATAL' || errorLog.errorLevel === 'CRITICAL' ? '🔥' : '🚨';
 

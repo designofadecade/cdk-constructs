@@ -22,6 +22,42 @@ interface ErrorLogMessage {
     formattedMessage?: string;
 }
 
+interface GuardDutyFinding {
+    schemaVersion?: string;
+    accountId?: string;
+    region?: string;
+    partition?: string;
+    id?: string;
+    arn?: string;
+    type?: string;
+    resource?: any;
+    service?: {
+        serviceName?: string;
+        detectorId?: string;
+        action?: any;
+        eventFirstSeen?: string;
+        eventLastSeen?: string;
+        archived?: boolean;
+        count?: number;
+    };
+    severity?: number;
+    title?: string;
+    description?: string;
+    createdAt?: string;
+    updatedAt?: string;
+}
+
+interface EventBridgeMessage {
+    version?: string;
+    id?: string;
+    'detail-type'?: string;
+    source?: string;
+    account?: string;
+    time?: string;
+    region?: string;
+    detail?: GuardDutyFinding;
+}
+
 // Cache the webhook URL to avoid repeated SSM calls
 let cachedWebhookUrl: string | null = null;
 
@@ -74,7 +110,7 @@ export const handler = async (event: SNSEvent): Promise<{ statusCode: number; bo
     const body = message.Message;
     const region = process.env.AWS_REGION || 'us-east-1';
 
-    let parsedBody: CloudWatchAlarmMessage | ErrorLogMessage;
+    let parsedBody: CloudWatchAlarmMessage | ErrorLogMessage | EventBridgeMessage;
     try {
         parsedBody = JSON.parse(body);
     } catch (e) {
@@ -83,8 +119,102 @@ export const handler = async (event: SNSEvent): Promise<{ statusCode: number; bo
 
     let teamsMessage: any;
 
+    // Check if this is a GuardDuty finding from EventBridge
+    if ('detail-type' in parsedBody && parsedBody['detail-type'] === 'GuardDuty Finding' && parsedBody.detail) {
+        const ebMessage = parsedBody as EventBridgeMessage;
+        const finding = ebMessage.detail!;
+
+        const severity = finding.severity || 0;
+        const severityLabel = severity >= 7 ? 'HIGH' : severity >= 4 ? 'MEDIUM' : 'LOW';
+        const emoji = severity >= 7 ? '🔴' : severity >= 4 ? '🟠' : '🟡';
+
+        // Build GuardDuty console URL
+        const findingId = finding.id || '';
+        const detectorId = finding.service?.detectorId || '';
+        const findingRegion = ebMessage.region || region;
+        const guardDutyUrl = detectorId && findingId
+            ? `https://${findingRegion}.console.aws.amazon.com/guardduty/home?region=${findingRegion}#/findings?search=id%3D${findingId}`
+            : `https://${findingRegion}.console.aws.amazon.com/guardduty/home?region=${findingRegion}`;
+
+        // Build facts array
+        const facts: Array<{ title: string; value: string }> = [
+            { title: 'Severity', value: `${severityLabel} (${severity})` },
+            { title: 'Type', value: finding.type || 'Unknown' },
+            { title: 'Account', value: finding.accountId || ebMessage.account || 'Unknown' },
+            { title: 'Region', value: finding.region || ebMessage.region || 'Unknown' },
+            { title: 'Time', value: ebMessage.time || new Date().toISOString() },
+        ];
+
+        if (finding.service?.eventFirstSeen) {
+            facts.push({ title: 'First Seen', value: finding.service.eventFirstSeen });
+        }
+        if (finding.service?.count) {
+            facts.push({ title: 'Count', value: String(finding.service.count) });
+        }
+
+        // Use Adaptive Card format
+        teamsMessage = {
+            type: 'message',
+            attachments: [
+                {
+                    contentType: 'application/vnd.microsoft.card.adaptive',
+                    content: {
+                        type: 'AdaptiveCard',
+                        $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',
+                        version: '1.4',
+                        msteams: {
+                            width: 'Full',
+                        },
+                        body: [
+                            {
+                                type: 'Container',
+                                style: 'emphasis',
+                                items: [
+                                    {
+                                        type: 'TextBlock',
+                                        text: `${messagePrefix}${messagePrefix ? ' ' : ''}${emoji} GuardDuty Finding`,
+                                        weight: 'Bolder',
+                                        size: 'Large',
+                                        wrap: true,
+                                        color: severity >= 7 ? 'Attention' : 'Warning',
+                                    },
+                                    {
+                                        type: 'TextBlock',
+                                        text: finding.title || 'Security Finding Detected',
+                                        size: 'Medium',
+                                        wrap: true,
+                                        spacing: 'None',
+                                    },
+                                ],
+                            },
+                            {
+                                type: 'TextBlock',
+                                text: finding.description || 'No description available',
+                                wrap: true,
+                                spacing: 'Medium',
+                            },
+                            {
+                                type: 'FactSet',
+                                facts: facts,
+                                separator: true,
+                                spacing: 'Medium',
+                            },
+                        ],
+                        actions: [
+                            {
+                                type: 'Action.OpenUrl',
+                                title: 'View in GuardDuty',
+                                url: guardDutyUrl,
+                                style: 'positive',
+                            },
+                        ],
+                    },
+                },
+            ],
+        };
+    }
     // Check if this is an error log message from CloudWatch Logs
-    if ('source' in parsedBody && parsedBody.source === 'CloudWatchLogs') {
+    else if ('source' in parsedBody && parsedBody.source === 'CloudWatchLogs') {
         const errorLog = parsedBody as ErrorLogMessage;
         const emoji = errorLog.errorLevel === 'FATAL' || errorLog.errorLevel === 'CRITICAL' ? '🔥' : '🚨';
 

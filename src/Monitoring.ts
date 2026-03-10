@@ -8,6 +8,8 @@ import { Alarm, ComparisonOperator, TreatMissingData } from 'aws-cdk-lib/aws-clo
 import { SnsAction } from 'aws-cdk-lib/aws-cloudwatch-actions';
 import { Function as LambdaFunction, Runtime, Code, type IFunction } from 'aws-cdk-lib/aws-lambda';
 import { PolicyStatement, Effect } from 'aws-cdk-lib/aws-iam';
+import { Rule, type IRule } from 'aws-cdk-lib/aws-events';
+import { SnsTopic } from 'aws-cdk-lib/aws-events-targets';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
@@ -34,6 +36,38 @@ export interface NotificationHandler {
 }
 
 /**
+ * GuardDuty severity levels
+ */
+export type GuardDutySeverity = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+
+/**
+ * GuardDuty monitoring configuration
+ */
+export interface GuardDutyConfig {
+    /**
+     * Enable GuardDuty findings monitoring
+     * Note: GuardDuty must be enabled in your AWS account
+     */
+    readonly enabled: boolean;
+
+    /**
+     * Minimum severity level to alert on (default: MEDIUM)
+     * Findings with this severity or higher will trigger notifications
+     */
+    readonly minSeverity?: GuardDutySeverity;
+
+    /**
+     * EventBridge rule name (default: auto-generated)
+     */
+    readonly ruleName?: string;
+
+    /**
+     * EventBridge rule description
+     */
+    readonly ruleDescription?: string;
+}
+
+/**
  * Configuration options for the Monitoring construct
  */
 export interface MonitoringProps {
@@ -56,6 +90,12 @@ export interface MonitoringProps {
      * Optional name for the shared log error processing function
      */
     readonly logErrorFunctionName?: string;
+
+    /**
+     * GuardDuty monitoring configuration
+     * When enabled, GuardDuty findings will be sent to the same SNS topic
+     */
+    readonly guardDuty?: GuardDutyConfig;
 }
 
 /**
@@ -64,8 +104,15 @@ export interface MonitoringProps {
 export interface AlarmConfig {
     /**
      * The metric filter to create an alarm for
+     * Either metricFilter or metric must be provided
      */
-    readonly metricFilter: MetricFilter;
+    readonly metricFilter?: MetricFilter;
+
+    /**
+     * The metric to create an alarm for (alternative to metricFilter)
+     * Either metricFilter or metric must be provided
+     */
+    readonly metric?: import('aws-cdk-lib/aws-cloudwatch').IMetric;
 
     /**
      * The name of the alarm (default: auto-generated)
@@ -135,6 +182,26 @@ export interface LogGroupConfig {
 
 export class Monitoring extends Construct {
     /**
+     * GuardDuty minimum severity: LOW (1.0-3.9)
+     */
+    public static readonly GUARD_DUTY_MIN_SEVERITY_LOW: GuardDutySeverity = 'LOW';
+
+    /**
+     * GuardDuty minimum severity: MEDIUM (4.0-6.9)
+     */
+    public static readonly GUARD_DUTY_MIN_SEVERITY_MEDIUM: GuardDutySeverity = 'MEDIUM';
+
+    /**
+     * GuardDuty minimum severity: HIGH (7.0-8.9)
+     */
+    public static readonly GUARD_DUTY_MIN_SEVERITY_HIGH: GuardDutySeverity = 'HIGH';
+
+    /**
+     * GuardDuty minimum severity: CRITICAL (9.0+)
+     */
+    public static readonly GUARD_DUTY_MIN_SEVERITY_CRITICAL: GuardDutySeverity = 'CRITICAL';
+
+    /**
      * The SNS topic for this monitoring setup
      */
     public readonly topic: ITopic;
@@ -148,6 +215,11 @@ export class Monitoring extends Construct {
      * List of alarms
      */
     public readonly alarms: Alarm[] = [];
+
+    /**
+     * GuardDuty EventBridge rule (if enabled)
+     */
+    public readonly guardDutyRule?: IRule;
 
     /**
      * Shared Lambda function for processing log errors
@@ -177,6 +249,11 @@ export class Monitoring extends Construct {
                 this.topic.addSubscription(new LambdaSubscription(handler));
                 this.notificationFunctions.push(handler);
             }
+        }
+
+        // Setup GuardDuty monitoring if enabled
+        if (props?.guardDuty?.enabled) {
+            this.guardDutyRule = this.createGuardDutyRule(props.guardDuty);
         }
     }
 
@@ -362,6 +439,46 @@ export class Monitoring extends Construct {
     }
 
     /**
+     * Creates an EventBridge rule to monitor GuardDuty findings
+     */
+    private createGuardDutyRule(config: GuardDutyConfig): IRule {
+        const minSeverity = config.minSeverity ?? 'MEDIUM';
+        const severityMap: Record<GuardDutySeverity, number> = {
+            'LOW': 1,
+            'MEDIUM': 4,
+            'HIGH': 7,
+            'CRITICAL': 8.5,
+        };
+
+        const minSeverityValue = severityMap[minSeverity];
+
+        // Create EventBridge rule for GuardDuty findings
+        // See: https://docs.aws.amazon.com/guardduty/latest/ug/guardduty_findings_cloudwatch.html
+        const rule = new Rule(this, 'GuardDutyRule', {
+            ruleName: config.ruleName,
+            description: config.ruleDescription ?? `GuardDuty findings with severity >= ${minSeverity}`,
+            eventPattern: {
+                source: ['aws.guardduty'],
+                detailType: ['GuardDuty Finding'],
+                detail: {
+                    severity: [
+                        {
+                            // Match numeric range based on severity
+                            // LOW: 1-3.9, MEDIUM: 4-6.9, HIGH: 7-8.9, CRITICAL: 9+
+                            numeric: ['>=', minSeverityValue],
+                        },
+                    ],
+                },
+            },
+        });
+
+        // Add SNS topic as target
+        rule.addTarget(new SnsTopic(this.topic));
+
+        return rule;
+    }
+
+    /**
      * Gets or creates the shared Lambda function for processing log errors
      * This function is reused across all log subscriptions
      */
@@ -390,13 +507,20 @@ export class Monitoring extends Construct {
      * Creates an alarm and adds it to this monitoring setup
      */
     public addAlarm(id: string, config: AlarmConfig): Alarm {
+        if (!config.metricFilter && !config.metric) {
+            throw new Error('Either metricFilter or metric must be provided in AlarmConfig');
+        }
+
+        // Get the metric from either metricFilter or direct metric
+        const metric = config.metric ?? config.metricFilter!.metric({
+            statistic: 'Sum',
+            period: Duration.minutes(5),
+        });
+
         const alarm = new Alarm(this, id, {
             alarmName: config.alarmName,
             alarmDescription: config.alarmDescription,
-            metric: config.metricFilter.metric({
-                statistic: 'Sum',
-                period: Duration.minutes(5),
-            }),
+            metric,
             threshold: config.threshold ?? 1,
             evaluationPeriods: config.evaluationPeriods ?? 1,
             comparisonOperator: config.comparisonOperator ?? ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
@@ -406,6 +530,35 @@ export class Monitoring extends Construct {
         alarm.addAlarmAction(new SnsAction(this.topic));
         this.alarms.push(alarm);
         return alarm;
+    }
+
+    /**
+     * Creates an alarm from a metric and adds it to this monitoring setup
+     * This is a convenience method for creating alarms from Lambda or other AWS service metrics
+     * 
+     * @example
+     * ```typescript
+     * monitoring.addMetricAlarm('FunctionErrors', {
+     *   metric: myFunction.metricErrors(),
+     *   threshold: 5,
+     *   alarmName: 'MyFunction-Errors',
+     *   alarmDescription: 'Alert when function has more than 5 errors',
+     * });
+     * ```
+     */
+    public addMetricAlarm(
+        id: string,
+        config: {
+            metric: import('aws-cdk-lib/aws-cloudwatch').IMetric;
+            alarmName?: string;
+            alarmDescription?: string;
+            threshold?: number;
+            evaluationPeriods?: number;
+            comparisonOperator?: ComparisonOperator;
+            treatMissingData?: TreatMissingData;
+        }
+    ): Alarm {
+        return this.addAlarm(id, config);
     }
 
     /**

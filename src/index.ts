@@ -75,6 +75,10 @@ export type { HttpApiProps, HttpMethodType, AddFunctionIntegrationOptions, Creat
 export { DynamoTable } from './DynamoTable.js';
 export type { DynamoTableProps, GlobalSecondaryIndexConfig } from './DynamoTable.js';
 
+export { Dashboard } from './Dashboard.js';
+export type { DashboardProps, GridPosition } from './Dashboard.js';
+export { TextWidgetBackground } from 'aws-cdk-lib/aws-cloudwatch';
+
 export { RdsDatabase } from './RdsDatabase.js';
 export type { RdsDatabaseProps } from './RdsDatabase.js';
 

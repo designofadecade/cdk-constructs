@@ -78,6 +78,12 @@ export interface RdsDatabaseProps {
      * Optional security groups that should have ingress access to the database
      */
     readonly ingressSecurityGroups?: ReadonlyArray<ISecurityGroup>;
+
+    /**
+     * Optional backup retention period in days (default: 7)
+     * Minimum: 1 day, Maximum: 35 days
+     */
+    readonly backupRetentionDays?: number;
 }
 
 /**
@@ -171,7 +177,7 @@ export class RdsDatabase extends Construct {
                 )
                 : undefined,
             backup: {
-                retention: Duration.days(7),
+                retention: Duration.days(props.backupRetentionDays ?? 7),
             },
             removalPolicy: RemovalPolicy.RETAIN,
         });
