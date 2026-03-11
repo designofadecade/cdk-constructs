@@ -64,9 +64,9 @@ const vpc = new Vpc(this, 'MyVpc', {
 | `endpoints` | `VpcEndpointType[]` | - | VPC endpoints: 'sqs', 'secrets-manager', 's3' |
 | `restrictPrivateSubnetNacls` | `boolean` | **false** | Enable restrictive NACLs (set `true` for new VPCs) |
 | `restrictPublicSubnetNacls` | `boolean` | **false** | Block internet access to public subnets (use when everything is behind API Gateway) |
-| `restrictDefaultNacl` | `boolean` | **false** | Lock down the default NACL to only allow VPC CIDR traffic (defense-in-depth) |
-| `defaultNaclAllowedPorts` | `number[]` | - | Specific TCP ports to allow from internet on default NACL (e.g., [80, 443]). Only applies when restrictDefaultNacl is true |
-| `allowedPorts` | `number[]` | - | Specific TCP ports to allow (e.g., [80, 443]). If not specified, all ports from VPC CIDR are allowed |
+| `restrictDefaultNacl` | `boolean` | **false** | Block ALL incoming internet traffic. Perfect for API Gateway + Lambda architecture. Allows Lambda to call external APIs. |
+| `defaultNaclAllowedPorts` | `number[]` | - | Open specific ports from internet (e.g., [80, 443] for ALB). Only use with restrictDefaultNacl. NOT needed for API Gateway + Lambda. |
+| `allowedPorts` | `number[]` | - | Specific TCP ports to allow for restrictPrivateSubnetNacls (e.g., [80, 443]). If not specified, all ports from VPC CIDR are allowed |
 | `stack` | `object` | Required | Stack reference with id and tags |
 
 ## Getters
@@ -180,60 +180,76 @@ const vpc = new Vpc(this, 'FullyPrivateVpc', {
 - Public-facing EC2 instances
 - Internet Gateway access
 
-### Lock Down the Default NACL (Defense-in-Depth)
+### Lock Down the Default NACL (API Gateway + Lambda Architecture)
 
 AWS automatically creates a **default Network ACL** for every VPC that allows all traffic (0.0.0.0/0). Any subnet not explicitly associated with a custom NACL will use this permissive default.
 
-For maximum security, lock down the default NACL to only allow VPC CIDR traffic:
+#### For API Gateway + Lambda (Everything in Private Subnets)
+
+When your architecture uses API Gateway with Lambda functions in private subnets:
 
 ```typescript
-const vpc = new Vpc(this, 'SecureVpc', {
-  name: 'secure-vpc',
+const vpc = new Vpc(this, 'ApiGatewayVpc', {
+  name: 'api-gateway-vpc',
   maxAzs: 2,
-  restrictDefaultNacl: true, // ✅ Lock down the default NACL
-  restrictPrivateSubnetNacls: true, // ✅ Custom NACLs for private subnets
+  natGateways: 0, // No NAT needed with VPC endpoints
+  endpoints: ['s3', 'secrets-manager'], // Use VPC endpoints
+  restrictDefaultNacl: true, // ✅ Block all incoming traffic from internet
   stack: { id: 'my-app', tags: [] },
 });
 ```
 
-**Why use this?**
-- **Defense-in-depth**: Even if a subnet isn't associated with a custom NACL, it's still protected
-- **Prevents misconfigurations**: Accidentally forgetting to apply a custom NACL won't expose resources
-- **No performance impact**: NACL rules are evaluated once at the subnet boundary
+**What this does:**
+- ✅ **Blocks ALL incoming traffic** from internet (0.0.0.0/0) - no one can connect in
+- ✅ **Allows all VPC internal traffic** - Lambda ↔ RDS, Lambda ↔ Lambda works fine
+- ✅ **Allows Lambda to call external APIs** - Stripe, SendGrid, etc. work perfectly
+- ✅ **Allows return traffic** - Ephemeral ports (1024-65535) allow responses back
 
 **How it works:**
-- Modifies the VPC's default NACL to allow traffic from VPC CIDR
-- Allows ephemeral ports (1024-65535) from internet for response traffic (external API calls)
-- Allows all outbound traffic (for calling external APIs)
-- Custom NACLs (from `restrictPrivateSubnetNacls` or `restrictPublicSubnetNacls`) take precedence
-- Subnets without custom NACLs automatically get restrictive rules via the default NACL
+```
+Internet → API Gateway (managed, outside VPC) → Lambda (private subnet)
+                                                    ↓
+                                            External API (Stripe, etc.)
+                                                    ↓
+                                            Response comes back via ephemeral ports ✅
+```
 
-#### Allow Specific Ports from Internet on Default NACL
+**Traffic Flow:**
+```
+Inbound:
+  - VPC CIDR (e.g., 10.0.0.0/16) → ALLOW (all ports)
+  - Internet ephemeral (1024-65535) → ALLOW (return traffic only)
+  - Internet standard ports (1-1023) → DENY (blocked!)
 
-If you have a load balancer or public service using the default NACL, you can open specific ports:
+Outbound:
+  - All traffic → ALLOW (Lambda can call any external API)
+```
+
+#### If You Need Public Services (Load Balancers)
+
+Only use `defaultNaclAllowedPorts` if you have **public-facing** services like load balancers:
 
 ```typescript
 const vpc = new Vpc(this, 'WebVpc', {
   name: 'web-vpc',
   maxAzs: 2,
   restrictDefaultNacl: true, // ✅ Lock down the default NACL
-  defaultNaclAllowedPorts: [80, 443], // ✅ Allow HTTP and HTTPS from internet
+  defaultNaclAllowedPorts: [80, 443], // ⚠️ Opens ports from internet (for ALB)
   stack: { id: 'my-app', tags: [] },
 });
 ```
 
-**This configuration:**
-- **Inbound**: Allows ports 80 and 443 from internet (0.0.0.0/0)
-- **Inbound**: Allows all traffic from VPC CIDR
-- **Inbound**: Allows ephemeral ports (1024-65535) from internet for return traffic
-- **Outbound**: Allows all traffic (for external API calls)
+**⚠️ WARNING**: Only use `defaultNaclAllowedPorts` if you need:
+- Application Load Balancer accepting internet traffic
+- Public EC2 instances
+- Other internet-facing services
 
-**Use cases:**
-- Application Load Balancer in subnets using default NACL
-- Public EC2 instances without custom NACLs
-- Services that need specific internet-facing ports open
+**For API Gateway + Lambda**: **DO NOT** set `defaultNaclAllowedPorts` - you don't need it!
 
-**Example with full defense-in-depth:**
+#### Defense-in-Depth with Custom NACLs
+
+Combine default NACL restriction with custom NACLs for maximum security:
+
 ```typescript
 const vpc = new Vpc(this, 'MaxSecurityVpc', {
   name: 'max-security-vpc',

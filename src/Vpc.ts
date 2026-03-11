@@ -105,9 +105,13 @@ export interface VpcProps {
     /**
      * Lock down the default Network ACL to only allow VPC CIDR traffic (default: false)
      * 
-     * When enabled, modifies the VPC's default NACL to only allow traffic from within 
-     * the VPC CIDR range. This provides defense-in-depth by ensuring any subnets not 
-     * explicitly associated with custom NACLs still have restrictive rules.
+     * When enabled, modifies the VPC's default NACL to:
+     * - Block ALL incoming traffic from internet (0.0.0.0/0)
+     * - Allow all traffic within VPC CIDR
+     * - Allow ephemeral ports from internet for return traffic (Lambda calling external APIs)
+     * - Allow all outbound traffic (so services can call external APIs)
+     * 
+     * **Perfect for**: API Gateway + Lambda architecture where everything runs in private subnets
      * 
      * **Recommended**: Set to `true` for NEW VPCs to prevent accidental exposure.
      * Default is `false` to maintain backward compatibility with existing deployments.
@@ -120,15 +124,17 @@ export interface VpcProps {
     /**
      * Specific TCP ports to allow from internet on the default NACL (optional)
      * 
-     * Only applies when restrictDefaultNacl is true. Allows internet traffic on 
-     * specific ports while keeping all other ports locked down to VPC CIDR only.
+     * Only applies when restrictDefaultNacl is true. Opens specific ports from 
+     * internet (0.0.0.0/0) while keeping all other ports blocked.
      * 
-     * Use this for load balancers or public-facing services in subnets using the default NACL.
-     * Ephemeral ports (1024-65535) are automatically allowed for response traffic.
+     * **Use ONLY if you need**: Load balancers, bastion hosts, or other public services 
+     * in subnets using the default NACL.
+     * 
+     * **For API Gateway + Lambda**: Leave this UNSET - API Gateway doesn't need inbound ports
      * 
      * @example
-     * defaultNaclAllowedPorts: [80, 443] // Allow HTTP and HTTPS from internet
-     * defaultNaclAllowedPorts: [22] // Allow SSH from internet
+     * defaultNaclAllowedPorts: [80, 443] // Allow HTTP and HTTPS from internet (for ALB)
+     * defaultNaclAllowedPorts: [22] // Allow SSH from internet (for bastion)
      */
     readonly defaultNaclAllowedPorts?: ReadonlyArray<number>;
 }

@@ -7,12 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Improved documentation for restrictDefaultNacl**
+  - Clarified primary use case: API Gateway + Lambda architecture with everything in private subnets
+  - Blocks ALL incoming internet traffic while allowing Lambda to call external APIs
+  - Updated property descriptions to emphasize API Gateway + Lambda use case
+  - Made clear that defaultNaclAllowedPorts is only for load balancers/public services
+
+## [1.14.1] - 2026-03-11
+
 ### Fixed
 - **CRITICAL: restrictDefaultNacl now properly blocks unauthorized traffic**
   - Added explicit DENY rule (32766) to block all traffic not explicitly allowed
   - Changed rule numbers to 90 (before AWS default rule 100) to ensure proper evaluation
   - Fixes issue where default AWS NACL rules (allow all 0.0.0.0/0) were not overridden
   - Now properly secures default NACL while allowing specified traffic
+  - **All users of v1.14.0 should upgrade immediately**
+
+## [1.14.0] - 2026-03-11 [YANKED - Security Issue]
+
+**⚠️ WARNING: This version had a security issue where restrictDefaultNacl did not properly block unauthorized traffic. Please upgrade to v1.14.1 or later.**
 
 ## [1.14.0] - 2026-03-11
 
