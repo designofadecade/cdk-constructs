@@ -62,12 +62,13 @@ export interface VpcProps {
     readonly endpoints?: ReadonlyArray<VpcEndpointType>;
 
     /**
-     * Enable restrictive Network ACLs for private subnets (default: true)
+     * Enable restrictive Network ACLs for private subnets (default: false)
      * 
      * When enabled, private subnets will only allow traffic from within the VPC CIDR range,
      * providing an additional security layer beyond security groups.
      * 
-     * Set to false if you need to customize NACL rules manually or have specific requirements.
+     * **IMPORTANT**: Set to `true` for NEW VPCs to enable enhanced security.
+     * Default is `false` to maintain backward compatibility with existing deployments.
      */
     readonly restrictPrivateSubnetNacls?: boolean;
 
@@ -186,7 +187,7 @@ export class Vpc extends Construct {
         }
 
         // Configure restrictive Network ACLs for private subnets
-        if (props.restrictPrivateSubnetNacls !== false) {
+        if (props.restrictPrivateSubnetNacls === true) {
             this.#configurePrivateSubnetNacls(vpcName, props.allowedPorts);
         }
 

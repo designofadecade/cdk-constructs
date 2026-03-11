@@ -14,9 +14,19 @@ CDK construct for creating AWS VPCs with public and private subnets.
 
 ## Security
 
-### Network ACL Protection
+### Network ACL Protection (Opt-In)
 
-By default, this construct creates **restrictive Network ACLs** for private subnets that only allow traffic from within the VPC CIDR range, not from the entire internet (0.0.0.0/0).
+**IMPORTANT**: Network ACL restrictions are **disabled by default** to maintain backward compatibility with existing deployments.
+
+For **NEW VPCs**, enable restrictive Network ACLs that only allow traffic from within the VPC CIDR range:
+
+```typescript
+const vpc = new Vpc(this, 'SecureVpc', {
+  name: 'secure-vpc',
+  restrictPrivateSubnetNacls: true, // ✅ Enable for new VPCs
+  stack: { id: 'my-app', tags: [] },
+});
+```
 
 **Private Egress Subnets:**
 - Inbound: Only from VPC CIDR
@@ -52,7 +62,7 @@ const vpc = new Vpc(this, 'MyVpc', {
 | `maxAzs` | `number` | 2 | Maximum availability zones |
 | `natGateways` | `number` | 0 | Number of NAT Gateways (0 = none, cost optimization) |
 | `endpoints` | `VpcEndpointType[]` | - | VPC endpoints: 'sqs', 'secrets-manager', 's3' |
-| `restrictPrivateSubnetNacls` | `boolean` | true | Enable restrictive NACLs for private subnets |
+| `restrictPrivateSubnetNacls` | `boolean` | **false** | Enable restrictive NACLs (set `true` for new VPCs) |
 | `allowedPorts` | `number[]` | - | Specific TCP ports to allow (e.g., [80, 443]). If not specified, all ports from VPC CIDR are allowed |
 | `stack` | `object` | Required | Stack reference with id and tags |
 
@@ -66,7 +76,7 @@ const vpc = new Vpc(this, 'MyVpc', {
 ## Best Practices
 
 1. **Use multiple AZs** for high availability (default: 2)
-2. **Keep Network ACL restrictions enabled** (default) for defense-in-depth
+2. **Enable Network ACL restrictions for NEW VPCs** (`restrictPrivateSubnetNacls: true`)
 3. **Use private subnets** for databases and application servers
 4. **Use public subnets** only for load balancers (if needed)
 5. **Prefer VPC endpoints** over NAT Gateways for AWS service access
@@ -76,28 +86,41 @@ const vpc = new Vpc(this, 'MyVpc', {
 
 ## Network ACL Configuration
 
-### Default Behavior (Recommended)
+### Enable for New VPCs (Recommended)
 
-Private subnets have restrictive NACLs that only allow traffic from within the VPC:
+For enhanced security on NEW VPCs, enable restrictive NACLs:
 
 ```typescript
 const vpc = new Vpc(this, 'SecureVpc', {
   name: 'secure-vpc',
   maxAzs: 2,
-  // restrictPrivateSubnetNacls: true (default)
-  // All ports from VPC CIDR allowed by default
+  restrictPrivateSubnetNacls: true, // ✅ Enable NACLs
+  stack: { id: 'my-app', tags: [] },
+});
+```
+
+### Default Behavior (Disabled)
+
+By default, NACLs are **disabled** for backward compatibility:
+
+```typescript
+const vpc = new Vpc(this, 'Vpc', {
+  name: 'my-vpc',
+  maxAzs: 2,
+  // restrictPrivateSubnetNacls: false (default)
   stack: { id: 'my-app', tags: [] },
 });
 ```
 
 ### Restrict to Specific Ports (HTTP/HTTPS)
 
-For even tighter security, allow only specific ports:
+For even tighter security on NEW VPCs, allow only specific ports:
 
 ```typescript
 const vpc = new Vpc(this, 'WebVpc', {
   name: 'web-vpc',
   maxAzs: 2,
+  restrictPrivateSubnetNacls: true, // Enable NACLs
   allowedPorts: [80, 443], // Only allow HTTP and HTTPS
   stack: { id: 'my-app', tags: [] },
 });
@@ -111,6 +134,7 @@ For database-specific workloads:
 const vpc = new Vpc(this, 'DbVpc', {
   name: 'db-vpc',
   maxAzs: 2,
+  restrictPrivateSubnetNacls: true, // Enable NACLs
   allowedPorts: [5432], // Only PostgreSQL
   stack: { id: 'my-app', tags: [] },
 });
@@ -124,6 +148,7 @@ Allow multiple specific services:
 const vpc = new Vpc(this, 'MultiVpc', {
   name: 'multi-vpc',
   maxAzs: 2,
+  restrictPrivateSubnetNacls: true, // Enable NACLs
   allowedPorts: [80, 443, 5432, 6379], // HTTP, HTTPS, PostgreSQL, Redis
   stack: { id: 'my-app', tags: [] },
 });
@@ -133,13 +158,13 @@ const vpc = new Vpc(this, 'MultiVpc', {
 
 ### Disable NACL Restrictions
 
-Only disable if you need custom NACL rules:
+NACLs are disabled by default. To explicitly disable:
 
 ```typescript
 const vpc = new Vpc(this, 'CustomVpc', {
   name: 'custom-vpc',
   maxAzs: 2,
-  restrictPrivateSubnetNacls: false, // Manually configure NACLs
+  restrictPrivateSubnetNacls: false, // Explicitly disabled (default)
   stack: { id: 'my-app', tags: [] },
 });
 ```
@@ -154,7 +179,7 @@ const vpc = new Vpc(this, 'PrivateVpc', {
   maxAzs: 2,
   natGateways: 0, // No NAT Gateway needed
   endpoints: ['s3', 'secrets-manager', 'sqs'], // Use VPC endpoints
-  restrictPrivateSubnetNacls: true, // Keep NACLs restrictive (default)
+  restrictPrivateSubnetNacls: true, // ✅ Enable NACLs for security
   stack: { id: 'my-app', tags: [] },
 });
 

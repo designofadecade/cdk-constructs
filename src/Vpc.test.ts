@@ -95,13 +95,31 @@ describe('Vpc', () => {
         expect(vpc.vpc).toBeInstanceOf(CdkVpc);
     });
 
-    it('creates restrictive Network ACLs for private subnets by default', () => {
+it('does not create Network ACLs by default for backward compatibility', () => {
         const app = new App();
         const stack = new Stack(app, 'TestStack');
 
         new Vpc(stack, 'TestVpc', {
             name: 'test-vpc',
             maxAzs: 2,
+            stack: { id: 'test', tags: [] },
+        });
+
+        const template = Template.fromStack(stack);
+        
+        // Should not create custom NACLs by default (backward compatibility)
+        template.resourceCountIs('AWS::EC2::NetworkAcl', 0);
+        template.resourceCountIs('AWS::EC2::NetworkAclEntry', 0);
+    });
+
+    it('creates restrictive Network ACLs when explicitly enabled', () => {
+        const app = new App();
+        const stack = new Stack(app, 'TestStack');
+
+        new Vpc(stack, 'TestVpc', {
+            name: 'test-vpc',
+            maxAzs: 2,
+            restrictPrivateSubnetNacls: true, // Explicitly enable
             stack: { id: 'test', tags: [] },
         });
 
@@ -117,14 +135,14 @@ describe('Vpc', () => {
         template.resourceCountIs('AWS::EC2::SubnetNetworkAclAssociation', 4);
     });
 
-    it('allows disabling restrictive Network ACLs', () => {
+it('allows disabling restrictive Network ACLs explicitly', () => {
         const app = new App();
         const stack = new Stack(app, 'TestStack');
 
         new Vpc(stack, 'TestVpc', {
             name: 'test-vpc',
             maxAzs: 2,
-            restrictPrivateSubnetNacls: false,
+            restrictPrivateSubnetNacls: false, // Explicitly disable
             stack: { id: 'test', tags: [] },
         });
 
@@ -142,6 +160,7 @@ describe('Vpc', () => {
         new Vpc(stack, 'TestVpc', {
             name: 'test-vpc',
             maxAzs: 2,
+            restrictPrivateSubnetNacls: true, // Enable for this test
             stack: { id: 'test', tags: [] },
         });
 
@@ -170,6 +189,7 @@ describe('Vpc', () => {
         new Vpc(stack, 'TestVpc', {
             name: 'test-vpc',
             maxAzs: 2,
+            restrictPrivateSubnetNacls: true, // Must enable NACLs
             allowedPorts: [80, 443], // HTTP and HTTPS only
             stack: { id: 'test', tags: [] },
         });
@@ -201,6 +221,7 @@ describe('Vpc', () => {
         new Vpc(stack, 'TestVpc', {
             name: 'test-vpc',
             maxAzs: 2,
+            restrictPrivateSubnetNacls: true, // Enable NACLs
             // No allowedPorts specified - should allow all traffic
             stack: { id: 'test', tags: [] },
         });
