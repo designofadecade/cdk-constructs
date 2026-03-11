@@ -2,6 +2,7 @@ import { Construct } from 'constructs';
 import { Tags, Fn } from 'aws-cdk-lib';
 import {
     Vpc as CdkVpc,
+    CfnVPC,
     SubnetType,
     type IVpc,
     InterfaceVpcEndpointAwsService,
@@ -416,7 +417,7 @@ export class Vpc extends Construct {
      */
     #restrictDefaultNacl(allowedPorts?: ReadonlyArray<number>): void {
         const vpcCidr = this.#vpc.vpcCidrBlock;
-        const defaultNaclId = Fn.getAtt(this.#vpc.node.defaultChild!.logicalId, 'DefaultNetworkAcl').toString();
+        const defaultNaclId = Fn.getAtt((this.#vpc.node.defaultChild as CfnVPC).logicalId, 'DefaultNetworkAcl').toString();
 
         // Inbound: Allow traffic from VPC CIDR (all ports)
         new CfnNetworkAclEntry(this, 'DefaultNaclInboundVpcOnly', {
