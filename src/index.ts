@@ -70,7 +70,7 @@ export type {
 } from './Cognito.js';
 
 export { HttpApi } from './HttpApi.js';
-export type { HttpApiProps, HttpMethodType, AddFunctionIntegrationOptions, CreateAuthorizerFunctionProps } from './HttpApi.js';
+export type { HttpApiProps, HttpMethodType, AddFunctionIntegrationOptions, CreateAuthorizerFunctionProps, CorsConfig, AccessLogsConfig } from './HttpApi.js';
 
 export { DynamoTable } from './DynamoTable.js';
 export type { DynamoTableProps, GlobalSecondaryIndexConfig } from './DynamoTable.js';

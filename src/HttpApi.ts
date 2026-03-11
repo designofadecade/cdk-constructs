@@ -1,9 +1,11 @@
 import { Construct } from 'constructs';
-import { Fn, Duration, Tags, CfnOutput } from 'aws-cdk-lib';
+import { Fn, Duration, Tags, CfnOutput, RemovalPolicy } from 'aws-cdk-lib';
 import { HttpApi as AwsHttpApi, HttpMethod, CorsHttpMethod, type IHttpRouteAuthorizer } from 'aws-cdk-lib/aws-apigatewayv2';
 import { HttpLambdaIntegration } from 'aws-cdk-lib/aws-apigatewayv2-integrations';
 import { HttpLambdaAuthorizer, HttpLambdaResponseType } from 'aws-cdk-lib/aws-apigatewayv2-authorizers';
 import type { IFunction } from 'aws-cdk-lib/aws-lambda';
+import { LogGroup, RetentionDays } from 'aws-cdk-lib/aws-logs';
+import type { IBucket } from 'aws-cdk-lib/aws-s3';
 
 /**
  * HTTP method types supported by API Gateway
@@ -46,6 +48,29 @@ export interface CorsConfig {
 }
 
 /**
+ * Access logs configuration for HTTP API
+ */
+export interface AccessLogsConfig {
+    /**
+     * Optional S3 bucket for storing access logs.
+     * Note: API Gateway logs to CloudWatch Logs first.
+     * You can configure CloudWatch Logs to export to this S3 bucket.
+     */
+    readonly s3Bucket?: IBucket;
+
+    /**
+     * Optional CloudWatch Logs retention period (default: 7 days)
+     */
+    readonly retention?: RetentionDays;
+
+    /**
+     * Optional custom log format.
+     * If not provided, uses the default format with common fields.
+     */
+    readonly format?: string;
+}
+
+/**
  * Properties for configuring the HTTP API
  */
 export interface HttpApiProps {
@@ -58,6 +83,12 @@ export interface HttpApiProps {
      * Optional CORS configuration. If not provided, CORS is disabled.
      */
     readonly cors?: CorsConfig | boolean;
+
+    /**
+     * Optional access logs configuration.
+     * When enabled, API Gateway access logs are sent to CloudWatch Logs.
+     */
+    readonly accessLogs?: AccessLogsConfig | boolean;
 
     /**
      * The stack reference containing ID and tags
@@ -127,10 +158,28 @@ export interface CreateAuthorizerFunctionProps {
  * 
  * // Add a public route
  * api.addFunctionIntegration('/health', healthFunction, ['GET']);
+ * 
+ * // API with access logs to CloudWatch
+ * const apiWithLogs = new HttpApi(this, 'ApiWithLogs', {
+ *   name: 'my-api',
+ *   accessLogs: true,
+ *   stack: { id: 'my-app', tags: [] },
+ * });
+ * 
+ * // API with custom access logs configuration
+ * const apiCustomLogs = new HttpApi(this, 'ApiCustomLogs', {
+ *   name: 'my-api',
+ *   accessLogs: {
+ *     s3Bucket: myLogsBucket,
+ *     retention: RetentionDays.ONE_MONTH,
+ *   },
+ *   stack: { id: 'my-app', tags: [] },
+ * });
  * ```
  */
 export class HttpApi extends Construct {
     #httpApi: AwsHttpApi;
+    #logGroup?: LogGroup;
 
     constructor(scope: Construct, id: string, props: HttpApiProps) {
         super(scope, id);
@@ -157,6 +206,38 @@ export class HttpApi extends Construct {
             apiName: props.name ?? props.stack.id,
             corsPreflight: corsConfig,
         });
+
+        // Configure access logs if enabled
+        if (props.accessLogs) {
+            const logsConfig = typeof props.accessLogs === 'boolean' ? {} : props.accessLogs;
+            
+            // Create CloudWatch Log Group
+            this.#logGroup = new LogGroup(this, 'AccessLogs', {
+                logGroupName: `/aws/apigateway/${props.name ?? props.stack.id}`,
+                retention: logsConfig.retention ?? RetentionDays.ONE_WEEK,
+                removalPolicy: RemovalPolicy.DESTROY,
+            });
+
+            // Configure default stage with access logging
+            const defaultStage = this.#httpApi.defaultStage?.node.defaultChild as any;
+            if (defaultStage) {
+                const logFormat = logsConfig.format ?? JSON.stringify({
+                    requestId: '$context.requestId',
+                    ip: '$context.identity.sourceIp',
+                    requestTime: '$context.requestTime',
+                    httpMethod: '$context.httpMethod',
+                    routeKey: '$context.routeKey',
+                    status: '$context.status',
+                    protocol: '$context.protocol',
+                    responseLength: '$context.responseLength',
+                });
+
+                defaultStage.accessLogSettings = {
+                    destinationArn: this.#logGroup.logGroupArn,
+                    format: logFormat,
+                };
+            }
+        }
 
         props.stack.tags.forEach(({ key, value }) => {
             Tags.of(this.#httpApi).add(key, value);
@@ -195,6 +276,13 @@ export class HttpApi extends Construct {
      */
     get apiEndpoint(): string {
         return this.#httpApi.url ?? '';
+    }
+
+    /**
+     * Gets the CloudWatch Log Group for access logs (if enabled)
+     */
+    get logGroup(): LogGroup | undefined {
+        return this.#logGroup;
     }
 
     /**

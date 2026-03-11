@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { App, Stack } from 'aws-cdk-lib';
 import { Template } from 'aws-cdk-lib/assertions';
 import { Function as LambdaFunction, Runtime, Code } from 'aws-cdk-lib/aws-lambda';
+import { RetentionDays } from 'aws-cdk-lib/aws-logs';
+import { Bucket } from 'aws-cdk-lib/aws-s3';
 import { HttpApi } from './HttpApi.js';
 
 describe('HttpApi', () => {
@@ -122,5 +124,75 @@ describe('HttpApi', () => {
         template.hasOutput('*', {
             Description: 'HTTP API Endpoint',
         });
+    });
+
+    it('does not create log group by default', () => {
+        const app = new App();
+        const stack = new Stack(app, 'TestStack');
+
+        const api = new HttpApi(stack, 'TestApi', {
+            name: 'test-api',
+            stack: { id: 'test', tags: [] },
+        });
+
+        const template = Template.fromStack(stack);
+        template.resourceCountIs('AWS::Logs::LogGroup', 0);
+        expect(api.logGroup).toBeUndefined();
+    });
+
+    it('creates log group when access logs enabled', () => {
+        const app = new App();
+        const stack = new Stack(app, 'TestStack');
+
+        const api = new HttpApi(stack, 'TestApi', {
+            name: 'test-api',
+            accessLogs: true,
+            stack: { id: 'test', tags: [] },
+        });
+
+        const template = Template.fromStack(stack);
+        template.resourceCountIs('AWS::Logs::LogGroup', 1);
+        template.hasResourceProperties('AWS::Logs::LogGroup', {
+            LogGroupName: '/aws/apigateway/test-api',
+            RetentionInDays: 7,
+        });
+        expect(api.logGroup).toBeDefined();
+    });
+
+    it('allows custom access logs configuration', () => {
+        const app = new App();
+        const stack = new Stack(app, 'TestStack');
+
+        new HttpApi(stack, 'TestApi', {
+            name: 'test-api',
+            accessLogs: {
+                retention: RetentionDays.ONE_MONTH,
+            },
+            stack: { id: 'test', tags: [] },
+        });
+
+        const template = Template.fromStack(stack);
+        template.hasResourceProperties('AWS::Logs::LogGroup', {
+            LogGroupName: '/aws/apigateway/test-api',
+            RetentionInDays: 30,
+        });
+    });
+
+    it('accepts S3 bucket for access logs', () => {
+        const app = new App();
+        const stack = new Stack(app, 'TestStack');
+        const bucket = new Bucket(stack, 'LogsBucket');
+
+        new HttpApi(stack, 'TestApi', {
+            name: 'test-api',
+            accessLogs: {
+                s3Bucket: bucket,
+            },
+            stack: { id: 'test', tags: [] },
+        });
+
+        const template = Template.fromStack(stack);
+        template.resourceCountIs('AWS::Logs::LogGroup', 1);
+        template.resourceCountIs('AWS::S3::Bucket', 1);
     });
 });

@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **HttpApi: Access logs to CloudWatch and S3**
+  - New `accessLogs` property to enable API Gateway access logging
+  - Logs are sent to CloudWatch Logs by default
+  - Optional S3 bucket reference for future CloudWatch to S3 export
+  - Configurable log retention period (default: 7 days)
+  - Custom log format support with sensible defaults (requestId, IP, method, status, etc.)
+  - New `logGroup` getter to access the CloudWatch Log Group
+  - Automatically configures the default stage with access logging
+  - Example: `accessLogs: true` or `accessLogs: { retention: RetentionDays.ONE_MONTH, s3Bucket: myBucket }`
+
 ## [1.15.2] - 2026-03-11
 
 ### Removed
