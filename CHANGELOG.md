@@ -7,7 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.12.0] - 2026-03-11
+## [1.12.1] - 2026-03-11
+
+### Fixed
+- **CRITICAL: Network ACL default changed to false** to prevent breaking existing deployments
+  - Fixed issue where v1.12.0 Network ACLs blocked Lambda→RDS and other internal communication by default
+  - `restrictPrivateSubnetNacls` now defaults to `false` for backward compatibility
+  - Existing VPC deployments are no longer affected by default
+  - Users must explicitly opt-in with `restrictPrivateSubnetNacls: true` for new VPCs
+  - This restores normal operation for Lambda→RDS, Lambda→ElastiCache, and other VPC-internal communications
+
+### Changed
+- Network ACLs are now **opt-in** instead of **opt-out** for safety
+- Updated all documentation to reflect opt-in behavior
+
+## [1.12.0] - 2026-03-11 [YANKED - Breaking Change]
+
+**⚠️ WARNING: This version had a breaking change that blocked internal VPC communication. Please upgrade to v1.12.1 or later.**
 
 ### Added
 - **Network ACL security for VPC private subnets (Opt-In)**
