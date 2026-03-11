@@ -73,6 +73,21 @@ export interface VpcProps {
     readonly restrictPrivateSubnetNacls?: boolean;
 
     /**
+     * Enable restrictive Network ACLs for public subnets (default: false)
+     * 
+     * When enabled, public subnets will only allow traffic from within the VPC CIDR range,
+     * effectively blocking all internet traffic (0.0.0.0/0).
+     * 
+     * **Use case**: When all services are behind API Gateway and you don't need internet-facing resources.
+     * 
+     * **IMPORTANT**: Only enable this if you do NOT need:
+     * - NAT Gateways (use VPC endpoints instead)
+     * - Application Load Balancers in public subnets
+     * - Any public-facing EC2 instances
+     */
+    readonly restrictPublicSubnetNacls?: boolean;
+
+    /**
      * Specific TCP ports to allow in Network ACLs for inbound traffic (optional)
      * 
      * If not specified, all traffic (all ports) from VPC CIDR is allowed.
@@ -191,6 +206,11 @@ export class Vpc extends Construct {
             this.#configurePrivateSubnetNacls(vpcName, props.allowedPorts);
         }
 
+        // Configure restrictive Network ACLs for public subnets
+        if (props.restrictPublicSubnetNacls === true) {
+            this.#configurePublicSubnetNacls(vpcName);
+        }
+
         // Tag the VPC itself
         props.stack.tags.forEach(({ key, value }) => {
             Tags.of(this.#vpc).add(key, value);
@@ -306,6 +326,45 @@ export class Vpc extends Construct {
         // Associate with all isolated subnets
         this.#vpc.isolatedSubnets.forEach((subnet, index) => {
             privateIsolatedNacl.associateWithSubnet(`PrivateIsolatedAssoc${index}`, {
+                subnets: [subnet],
+            });
+        });
+    }
+
+    /**
+     * Configures restrictive Network ACLs for public subnets
+     * Blocks all internet traffic to prevent public access when not needed
+     */
+    #configurePublicSubnetNacls(vpcName: string): void {
+        const vpcCidr = this.#vpc.vpcCidrBlock;
+
+        // Create NACL for public subnets
+        const publicNacl = new NetworkAcl(this, 'PublicNacl', {
+            vpc: this.#vpc,
+            networkAclName: `${vpcName}-public-nacl`,
+        });
+
+        // Inbound: Only allow traffic from VPC CIDR (block internet)
+        publicNacl.addEntry('AllowInboundFromVpc', {
+            cidr: AclCidr.ipv4(vpcCidr),
+            ruleNumber: 100,
+            traffic: AclTraffic.allTraffic(),
+            direction: TrafficDirection.INGRESS,
+            ruleAction: Action.ALLOW,
+        });
+
+        // Outbound: Only allow traffic to VPC CIDR (block internet)
+        publicNacl.addEntry('AllowOutboundToVpc', {
+            cidr: AclCidr.ipv4(vpcCidr),
+            ruleNumber: 100,
+            traffic: AclTraffic.allTraffic(),
+            direction: TrafficDirection.EGRESS,
+            ruleAction: Action.ALLOW,
+        });
+
+        // Associate with all public subnets
+        this.#vpc.publicSubnets.forEach((subnet, index) => {
+            publicNacl.associateWithSubnet(`PublicAssoc${index}`, {
                 subnets: [subnet],
             });
         });

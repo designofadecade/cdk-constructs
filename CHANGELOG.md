@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Network ACL restrictions for public subnets**
+  - `restrictPublicSubnetNacls` property to block internet access (0.0.0.0/0) to public subnets
+  - Useful when all services are behind API Gateway and no public-facing resources are needed
+  - Blocks both inbound and outbound internet traffic on public subnets
+  - Only allows traffic within VPC CIDR range
+  - Comprehensive test coverage with 14 passing VPC tests
+
 ## [1.12.1] - 2026-03-11
 
 ### Fixed

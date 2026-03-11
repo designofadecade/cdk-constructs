@@ -62,8 +62,7 @@ const vpc = new Vpc(this, 'MyVpc', {
 | `maxAzs` | `number` | 2 | Maximum availability zones |
 | `natGateways` | `number` | 0 | Number of NAT Gateways (0 = none, cost optimization) |
 | `endpoints` | `VpcEndpointType[]` | - | VPC endpoints: 'sqs', 'secrets-manager', 's3' |
-| `restrictPrivateSubnetNacls` | `boolean` | **false** | Enable restrictive NACLs (set `true` for new VPCs) |
-| `allowedPorts` | `number[]` | - | Specific TCP ports to allow (e.g., [80, 443]). If not specified, all ports from VPC CIDR are allowed |
+| `restrictPrivateSubnetNacls` | `boolean` | **false** | Enable restrictive NACLs (set `true` for new VPCs) || `restrictPublicSubnetNacls` | `boolean` | **false** | Block internet access to public subnets (use when everything is behind API Gateway) || `allowedPorts` | `number[]` | - | Specific TCP ports to allow (e.g., [80, 443]). If not specified, all ports from VPC CIDR are allowed |
 | `stack` | `object` | Required | Stack reference with id and tags |
 
 ## Getters
@@ -156,6 +155,27 @@ const vpc = new Vpc(this, 'MultiVpc', {
 
 **Note:** When you specify `allowedPorts`, ephemeral ports (1024-65535) are automatically allowed for return traffic, as NACLs are stateless.
 
+### Block Public Subnet Internet Access
+
+When you don't need ANY public-facing resources (everything behind API Gateway):
+
+```typescript
+const vpc = new Vpc(this, 'FullyPrivateVpc', {
+  name: 'fully-private-vpc',
+  maxAzs: 2,
+  restrictPublicSubnetNacls: true, // ✅ Block internet on public subnets
+  restrictPrivateSubnetNacls: true, // ✅ Secure private subnets
+  endpoints: ['s3', 'secrets-manager'],
+  stack: { id: 'my-app', tags: [] },
+});
+```
+
+**⚠️ WARNING**: Only enable `restrictPublicSubnetNacls: true` if you do NOT need:
+- NAT Gateways (they require internet access)
+- Application Load Balancers in public subnets
+- Public-facing EC2 instances
+- Internet Gateway access
+
 ### Disable NACL Restrictions
 
 NACLs are disabled by default. To explicitly disable:
@@ -179,9 +199,28 @@ const vpc = new Vpc(this, 'PrivateVpc', {
   maxAzs: 2,
   natGateways: 0, // No NAT Gateway needed
   endpoints: ['s3', 'secrets-manager', 'sqs'], // Use VPC endpoints
-  restrictPrivateSubnetNacls: true, // ✅ Enable NACLs for security
+  restrictPrivateSubnetNacls: true, // ✅ Secure private subnets
+  restrictPublicSubnetNacls: true,  // ✅ Block internet access to public subnets
   stack: { id: 'my-app', tags: [] },
 });
+
+// Your Lambdas behind API Gateway
+const api = new HttpApi(this, 'Api', {
+  functions: [{
+    path: '/api',
+    handler: myFunction,
+    // Function runs in private subnet with full NACL protection
+  }],
+  stack: { id: 'my-app', tags: [] },
+});
+```
+
+**Benefits:**
+- API Gateway handles all public traffic (outside VPC)
+- Lambda functions run in private subnets (secured)
+- Public subnets blocked from internet (no attack surface)
+- Private subnets only allow VPC internal traffic
+- VPC endpoints for AWS services (no internet needed)
 
 // Your Lambdas behind API Gateway
 const api = new HttpApi(this, 'Api', {

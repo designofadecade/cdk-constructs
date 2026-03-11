@@ -239,4 +239,51 @@ it('allows disabling restrictive Network ACLs explicitly', () => {
         });
         expect(allTrafficRules.length).toBe(2);
     });
+
+    it('creates restrictive Network ACLs for public subnets when enabled', () => {
+        const app = new App();
+        const stack = new Stack(app, 'TestStack');
+
+        new Vpc(stack, 'TestVpc', {
+            name: 'test-vpc',
+            maxAzs: 2,
+            restrictPublicSubnetNacls: true, // Enable public subnet NACLs
+            stack: { id: 'test', tags: [] },
+        });
+
+        const template = Template.fromStack(stack);
+        
+        // Should create 1 custom NACL for public subnets
+        template.resourceCountIs('AWS::EC2::NetworkAcl', 1);
+        
+        // Should create 2 NACL entries (1 ingress + 1 egress)
+        template.resourceCountIs('AWS::EC2::NetworkAclEntry', 2);
+        
+        // Verify NACL associations (2 AZs = 2 public subnets)
+        template.resourceCountIs('AWS::EC2::SubnetNetworkAclAssociation', 2);
+    });
+
+    it('creates NACLs for both public and private subnets when both enabled', () => {
+        const app = new App();
+        const stack = new Stack(app, 'TestStack');
+
+        new Vpc(stack, 'TestVpc', {
+            name: 'test-vpc',
+            maxAzs: 2,
+            restrictPrivateSubnetNacls: true, // Enable private NACLs
+            restrictPublicSubnetNacls: true,  // Enable public NACLs
+            stack: { id: 'test', tags: [] },
+        });
+
+        const template = Template.fromStack(stack);
+        
+        // Should create 3 NACLs (1 public + 2 private)
+        template.resourceCountIs('AWS::EC2::NetworkAcl', 3);
+        
+        // Should create 6 NACL entries (2 for public + 4 for private)
+        template.resourceCountIs('AWS::EC2::NetworkAclEntry', 6);
+        
+        // Verify NACL associations (2 public + 4 private = 6 total)
+        template.resourceCountIs('AWS::EC2::SubnetNetworkAclAssociation', 6);
+    });
 });
