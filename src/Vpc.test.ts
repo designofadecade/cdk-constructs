@@ -302,7 +302,7 @@ describe('Vpc', () => {
         const entries = template.findResources('AWS::EC2::NetworkAclEntry');
         const ingressEntries = Object.values(entries).filter((entry: any) => entry.Properties.Egress === false);
         expect(ingressEntries.length).toBe(3); // VPC CIDR + ephemeral + DENY
-        
+
         // Verify DENY rule exists
         const denyRules = Object.values(entries).filter((entry: any) => entry.Properties.RuleAction === 'deny');
         expect(denyRules.length).toBe(1);
