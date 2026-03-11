@@ -8,6 +8,12 @@ import {
     GatewayVpcEndpointAwsService,
     type IInterfaceVpcEndpoint,
     type IGatewayVpcEndpoint,
+    NetworkAcl,
+    AclTraffic,
+    AclCidr,
+    Action,
+    TrafficDirection,
+    SubnetSelection,
 } from 'aws-cdk-lib/aws-ec2';
 
 /**
@@ -54,6 +60,29 @@ export interface VpcProps {
      * - 's3': Gateway endpoint for Amazon S3
      */
     readonly endpoints?: ReadonlyArray<VpcEndpointType>;
+
+    /**
+     * Enable restrictive Network ACLs for private subnets (default: true)
+     * 
+     * When enabled, private subnets will only allow traffic from within the VPC CIDR range,
+     * providing an additional security layer beyond security groups.
+     * 
+     * Set to false if you need to customize NACL rules manually or have specific requirements.
+     */
+    readonly restrictPrivateSubnetNacls?: boolean;
+
+    /**
+     * Specific TCP ports to allow in Network ACLs for inbound traffic (optional)
+     * 
+     * If not specified, all traffic (all ports) from VPC CIDR is allowed.
+     * Use this to further restrict traffic to specific ports.
+     * 
+     * @example
+     * allowedPorts: [80, 443] // Only allow HTTP and HTTPS
+     * allowedPorts: [22, 3389] // Only allow SSH and RDP
+     * allowedPorts: [5432] // Only allow PostgreSQL
+     */
+    readonly allowedPorts?: ReadonlyArray<number>;
 }
 
 /**
@@ -156,9 +185,128 @@ export class Vpc extends Construct {
             });
         }
 
+        // Configure restrictive Network ACLs for private subnets
+        if (props.restrictPrivateSubnetNacls !== false) {
+            this.#configurePrivateSubnetNacls(vpcName, props.allowedPorts);
+        }
+
         // Tag the VPC itself
         props.stack.tags.forEach(({ key, value }) => {
             Tags.of(this.#vpc).add(key, value);
+        });
+    }
+
+    /**
+     * Configures restrictive Network ACLs for private subnets
+     * Private subnets should only accept traffic from within the VPC CIDR
+     */
+    #configurePrivateSubnetNacls(vpcName: string, allowedPorts?: ReadonlyArray<number>): void {
+        const vpcCidr = this.#vpc.vpcCidrBlock;
+
+        // Create NACL for private subnets with egress
+        const privateEgressNacl = new NetworkAcl(this, 'PrivateEgressNacl', {
+            vpc: this.#vpc,
+            networkAclName: `${vpcName}-private-egress-nacl`,
+        });
+
+        // Inbound: Allow traffic from VPC CIDR (all ports or specific ports)
+        if (allowedPorts && allowedPorts.length > 0) {
+            // Add specific port rules
+            allowedPorts.forEach((port, index) => {
+                privateEgressNacl.addEntry(`AllowInboundPort${port}`, {
+                    cidr: AclCidr.ipv4(vpcCidr),
+                    ruleNumber: 100 + index,
+                    traffic: AclTraffic.tcpPort(port),
+                    direction: TrafficDirection.INGRESS,
+                    ruleAction: Action.ALLOW,
+                });
+            });
+            // Allow ephemeral ports for return traffic (required for stateless NACLs)
+            privateEgressNacl.addEntry('AllowEphemeralPorts', {
+                cidr: AclCidr.ipv4(vpcCidr),
+                ruleNumber: 200,
+                traffic: AclTraffic.tcpPortRange(1024, 65535),
+                direction: TrafficDirection.INGRESS,
+                ruleAction: Action.ALLOW,
+            });
+        } else {
+            // Allow all traffic from VPC CIDR
+            privateEgressNacl.addEntry('AllowInboundFromVpc', {
+                cidr: AclCidr.ipv4(vpcCidr),
+                ruleNumber: 100,
+                traffic: AclTraffic.allTraffic(),
+                direction: TrafficDirection.INGRESS,
+                ruleAction: Action.ALLOW,
+            });
+        }
+
+        // Outbound: Allow all traffic (for VPC endpoints, NAT gateway, etc.)
+        privateEgressNacl.addEntry('AllowAllOutbound', {
+            cidr: AclCidr.anyIpv4(),
+            ruleNumber: 100,
+            traffic: AclTraffic.allTraffic(),
+            direction: TrafficDirection.EGRESS,
+            ruleAction: Action.ALLOW,
+        });
+
+        // Associate with all private egress subnets using subnet selection
+        this.#vpc.privateSubnets.forEach((subnet, index) => {
+            privateEgressNacl.associateWithSubnet(`PrivateEgressAssoc${index}`, {
+                subnets: [subnet],
+            });
+        });
+
+        // Create NACL for isolated private subnets
+        const privateIsolatedNacl = new NetworkAcl(this, 'PrivateIsolatedNacl', {
+            vpc: this.#vpc,
+            networkAclName: `${vpcName}-private-isolated-nacl`,
+        });
+
+        // Inbound: Allow traffic from VPC CIDR (all ports or specific ports)
+        if (allowedPorts && allowedPorts.length > 0) {
+            // Add specific port rules
+            allowedPorts.forEach((port, index) => {
+                privateIsolatedNacl.addEntry(`AllowInboundPort${port}`, {
+                    cidr: AclCidr.ipv4(vpcCidr),
+                    ruleNumber: 100 + index,
+                    traffic: AclTraffic.tcpPort(port),
+                    direction: TrafficDirection.INGRESS,
+                    ruleAction: Action.ALLOW,
+                });
+            });
+            // Allow ephemeral ports for return traffic
+            privateIsolatedNacl.addEntry('AllowEphemeralPorts', {
+                cidr: AclCidr.ipv4(vpcCidr),
+                ruleNumber: 200,
+                traffic: AclTraffic.tcpPortRange(1024, 65535),
+                direction: TrafficDirection.INGRESS,
+                ruleAction: Action.ALLOW,
+            });
+        } else {
+            // Allow all traffic from VPC CIDR
+            privateIsolatedNacl.addEntry('AllowInboundFromVpc', {
+                cidr: AclCidr.ipv4(vpcCidr),
+                ruleNumber: 100,
+                traffic: AclTraffic.allTraffic(),
+                direction: TrafficDirection.INGRESS,
+                ruleAction: Action.ALLOW,
+            });
+        }
+
+        // Outbound: Allow traffic only to VPC CIDR (fully isolated)
+        privateIsolatedNacl.addEntry('AllowOutboundToVpc', {
+            cidr: AclCidr.ipv4(vpcCidr),
+            ruleNumber: 100,
+            traffic: AclTraffic.allTraffic(),
+            direction: TrafficDirection.EGRESS,
+            ruleAction: Action.ALLOW,
+        });
+
+        // Associate with all isolated subnets
+        this.#vpc.isolatedSubnets.forEach((subnet, index) => {
+            privateIsolatedNacl.associateWithSubnet(`PrivateIsolatedAssoc${index}`, {
+                subnets: [subnet],
+            });
         });
     }
 

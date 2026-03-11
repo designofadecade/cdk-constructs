@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.12.0] - 2026-03-11
+
+### Added
+- **Network ACL security for VPC private subnets**
+  - Restrictive Network ACLs enabled by default for private subnets
+  - Only allows inbound traffic from VPC CIDR range, blocks external traffic (0.0.0.0/0)
+  - Separate NACLs for private-egress and private-isolated subnets
+  - `restrictPrivateSubnetNacls` property (default: `true`) to enable/disable NACL restrictions
+  - `allowedPorts` property to specify specific TCP ports (e.g., `[80, 443]`)
+  - Automatic ephemeral port rules (1024-65535) for return traffic when using specific ports
+  - Private-egress subnets: Allow inbound from VPC CIDR, allow all outbound
+  - Private-isolated subnets: Allow inbound from VPC CIDR, allow outbound only to VPC CIDR
+  - Defense-in-depth security with both Network ACLs (subnet-level) and Security Groups (resource-level)
+  - Comprehensive test coverage with 11 passing VPC tests
+  - Full documentation with security best practices and examples in [VPC docs](./docs/Vpc.md)
+
+### Security
+- VPC private subnets are now secured by default with restrictive Network ACLs
+- Prevents misconfigured security groups from exposing resources to the internet
+- Provides compliance-ready network isolation (PCI-DSS, HIPAA requirements)
+
+### Note
+- **Breaking Change Warning**: Existing VPCs can safely upgrade by setting `restrictPrivateSubnetNacls: false` to maintain current behavior
+- New VPCs will have NACLs enabled by default for enhanced security
+
 ## [1.11.0] - 2026-03-10
 
 ### Added

@@ -5,10 +5,28 @@ CDK construct for creating AWS VPCs with public and private subnets.
 ## Features
 
 - Public and private subnets across multiple AZs
+- Private isolated subnets for sensitive resources (databases)
+- **Restrictive Network ACLs** for private subnets (enabled by default)
 - NAT Gateway for private subnet internet access
-- Flow logs enabled
+- VPC Endpoints for AWS services (SQS, Secrets Manager, S3)
 - IPv4 CIDR configuration
 - Route table management
+
+## Security
+
+### Network ACL Protection
+
+By default, this construct creates **restrictive Network ACLs** for private subnets that only allow traffic from within the VPC CIDR range, not from the entire internet (0.0.0.0/0).
+
+**Private Egress Subnets:**
+- Inbound: Only from VPC CIDR
+- Outbound: All traffic (for NAT Gateway, VPC endpoints)
+
+**Private Isolated Subnets:**
+- Inbound: Only from VPC CIDR
+- Outbound: Only to VPC CIDR (fully isolated)
+
+This provides defense-in-depth security alongside security groups.
 
 ## Basic Usage
 
@@ -17,8 +35,9 @@ import { Vpc } from '@designofadecade/cdk-constructs';
 
 const vpc = new Vpc(this, 'MyVpc', {
   name: 'my-vpc',
-  cidr: '10.0.0.0/16',
   maxAzs: 2,
+  natGateways: 0, // No NAT Gateway (use VPC endpoints instead)
+  endpoints: ['s3', 'secrets-manager'], // VPC endpoints for common services
   stack: { id: 'my-app', tags: [] },
 });
 ```
@@ -29,29 +48,126 @@ const vpc = new Vpc(this, 'MyVpc', {
 
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
-| `name` | `string` | Required | VPC name |
-| `cidr` | `string` | '10.0.0.0/16' | IPv4 CIDR block |
+| `name` | `string` | stack.id | VPC name |
 | `maxAzs` | `number` | 2 | Maximum availability zones |
-| `stack` | `object` | Required | Stack ID and tags |
-| `enableFlowLogs` | `boolean` | true | Enable VPC flow logs |
+| `natGateways` | `number` | 0 | Number of NAT Gateways (0 = none, cost optimization) |
+| `endpoints` | `VpcEndpointType[]` | - | VPC endpoints: 'sqs', 'secrets-manager', 's3' |
+| `restrictPrivateSubnetNacls` | `boolean` | true | Enable restrictive NACLs for private subnets |
+| `allowedPorts` | `number[]` | - | Specific TCP ports to allow (e.g., [80, 443]). If not specified, all ports from VPC CIDR are allowed |
+| `stack` | `object` | Required | Stack reference with id and tags |
 
 ## Getters
 
-- `vpc` - VPC instance
-- `vpcId` - VPC ID
-- `publicSubnets` - Public subnet IDs
-- `privateSubnets` - Private subnet IDs
+- `vpc` - The underlying CDK VPC instance
+- `sqsEndpoint` - SQS VPC endpoint (if created)
+- `secretsManagerEndpoint` - Secrets Manager VPC endpoint (if created)
+- `s3Endpoint` - S3 VPC endpoint (if created)
 
 ## Best Practices
 
 1. **Use multiple AZs** for high availability (default: 2)
-2. **Enable flow logs** for security monitoring (default)
+2. **Keep Network ACL restrictions enabled** (default) for defense-in-depth
 3. **Use private subnets** for databases and application servers
-4. **Use public subnets** only for load balancers and NAT gateways
-5. **Plan CIDR blocks** to avoid conflicts with other VPCs
-6. **Use VPC peering** for inter-VPC communication
-7. **Enable VPC endpoints** for AWS services (S3, DynamoDB)
-8. **Consider NAT Gateway costs** - $0.045/hour per AZ
+4. **Use public subnets** only for load balancers (if needed)
+5. **Prefer VPC endpoints** over NAT Gateways for AWS service access
+6. **Use isolated subnets** for databases that don't need internet access
+7. **Plan CIDR blocks** to avoid conflicts with other VPCs
+8. **Disable NAT Gateways** (natGateways: 0) if services are behind API Gateway
+
+## Network ACL Configuration
+
+### Default Behavior (Recommended)
+
+Private subnets have restrictive NACLs that only allow traffic from within the VPC:
+
+```typescript
+const vpc = new Vpc(this, 'SecureVpc', {
+  name: 'secure-vpc',
+  maxAzs: 2,
+  // restrictPrivateSubnetNacls: true (default)
+  // All ports from VPC CIDR allowed by default
+  stack: { id: 'my-app', tags: [] },
+});
+```
+
+### Restrict to Specific Ports (HTTP/HTTPS)
+
+For even tighter security, allow only specific ports:
+
+```typescript
+const vpc = new Vpc(this, 'WebVpc', {
+  name: 'web-vpc',
+  maxAzs: 2,
+  allowedPorts: [80, 443], // Only allow HTTP and HTTPS
+  stack: { id: 'my-app', tags: [] },
+});
+```
+
+### Database-Only Access
+
+For database-specific workloads:
+
+```typescript
+const vpc = new Vpc(this, 'DbVpc', {
+  name: 'db-vpc',
+  maxAzs: 2,
+  allowedPorts: [5432], // Only PostgreSQL
+  stack: { id: 'my-app', tags: [] },
+});
+```
+
+### Multiple Service Ports
+
+Allow multiple specific services:
+
+```typescript
+const vpc = new Vpc(this, 'MultiVpc', {
+  name: 'multi-vpc',
+  maxAzs: 2,
+  allowedPorts: [80, 443, 5432, 6379], // HTTP, HTTPS, PostgreSQL, Redis
+  stack: { id: 'my-app', tags: [] },
+});
+```
+
+**Note:** When you specify `allowedPorts`, ephemeral ports (1024-65535) are automatically allowed for return traffic, as NACLs are stateless.
+
+### Disable NACL Restrictions
+
+Only disable if you need custom NACL rules:
+
+```typescript
+const vpc = new Vpc(this, 'CustomVpc', {
+  name: 'custom-vpc',
+  maxAzs: 2,
+  restrictPrivateSubnetNacls: false, // Manually configure NACLs
+  stack: { id: 'my-app', tags: [] },
+});
+```
+
+### Behind API Gateway Architecture
+
+If all your services are behind API Gateway with no public access:
+
+```typescript
+const vpc = new Vpc(this, 'PrivateVpc', {
+  name: 'private-vpc',
+  maxAzs: 2,
+  natGateways: 0, // No NAT Gateway needed
+  endpoints: ['s3', 'secrets-manager', 'sqs'], // Use VPC endpoints
+  restrictPrivateSubnetNacls: true, // Keep NACLs restrictive (default)
+  stack: { id: 'my-app', tags: [] },
+});
+
+// Your Lambdas behind API Gateway
+const api = new HttpApi(this, 'Api', {
+  functions: [{
+    path: '/api',
+    handler: myFunction,
+    // Function runs in private subnet with NACL protection
+  }],
+  stack: { id: 'my-app', tags: [] },
+});
+```
 
 ## CIDR Planning
 
@@ -64,6 +180,55 @@ Reserved IPs per subnet:
 - First 4 IPs: AWS reserved
 - Last IP: Broadcast
 - Usable: Total - 5
+
+## Security Architecture
+
+### Network ACLs vs Security Groups
+
+This construct implements **defense-in-depth** with both Network ACLs and Security Groups:
+
+| Feature | Network ACLs | Security Groups |
+|---------|--------------|-----------------|
+| **Layer** | Subnet level | Instance/ENI level |
+| **Stateless** | Yes (must configure inbound + outbound) | No (stateful) |
+| **Rules** | Allow and Deny | Allow only |
+| **Default** | Restrictive (VPC CIDR only) | Permissive (0.0.0.0/0) |
+| **Use Case** | Broad subnet protection | Fine-grained resource control |
+
+### Why Both?
+
+**Network ACLs (Subnet-level):**
+- First line of defense
+- Prevents unauthorized traffic from reaching subnet
+- Protects against misconfigured security groups
+- Required for compliance (PCI-DSS, HIPAA)
+
+**Security Groups (Resource-level):**
+- Fine-grained control per resource
+- Easier to manage for specific services
+- Stateful (automatic return traffic)
+
+### Example: Database Security
+
+```typescript
+const vpc = new Vpc(this, 'Vpc', {
+  name: 'secure-vpc',
+  restrictPrivateSubnetNacls: true, // NACL: Only VPC CIDR
+  stack: { id: 'my-app', tags: [] },
+});
+
+const db = new RdsDatabase(this, 'Database', {
+  vpc,
+  // Security Group: Only allow specific Lambda security group
+  allowConnectionsFrom: [lambdaSecurityGroup],
+  stack: { id: 'my-app', tags: [] },
+});
+```
+
+**Security layers:**
+1. **NACL**: Only allows traffic from VPC CIDR (10.0.0.0/16)
+2. **Security Group**: Only allows traffic from Lambda security group
+3. **IAM**: Database credentials managed by Secrets Manager
 
 ## NAT Gateway Cost Optimization
 
