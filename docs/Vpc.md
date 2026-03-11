@@ -204,6 +204,7 @@ const vpc = new Vpc(this, 'ApiGatewayVpc', {
 - ✅ **Allows all VPC internal traffic** - Lambda ↔ RDS, Lambda ↔ Lambda works fine
 - ✅ **Allows Lambda to call external APIs** - Stripe, SendGrid, etc. work perfectly
 - ✅ **Allows return traffic** - Ephemeral ports (1024-65535) allow responses back
+- ✅ **Tags the default NACL** - Named as `{vpcName}-default-nacl` for easy identification
 
 **How it works:**
 ```

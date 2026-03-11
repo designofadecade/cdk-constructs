@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Default NACL naming** - Default NACL is now automatically tagged with Name: `{vpcName}-default-nacl` for easy identification in AWS console
+
 ### Changed
 - **Improved documentation for restrictDefaultNacl**
   - Clarified primary use case: API Gateway + Lambda architecture with everything in private subnets
