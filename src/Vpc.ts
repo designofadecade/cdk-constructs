@@ -425,42 +425,32 @@ export class Vpc extends Construct {
         const vpcCidr = this.#vpc.vpcCidrBlock;
         const defaultNaclId = Fn.getAtt((this.#vpc.node.defaultChild as CfnVPC).logicalId, 'DefaultNetworkAcl').toString();
 
-        // Delete the AWS default inbound rule 100 that allows all traffic
-        new CfnNetworkAclEntry(this, 'DeleteDefaultInboundRule', {
+        // Inbound: Deny all traffic from internet (evaluated before default rule 100)
+        new CfnNetworkAclEntry(this, 'DefaultNaclDenyInboundInternet', {
             networkAclId: defaultNaclId,
-            ruleNumber: 100,
-            protocol: -1,
+            ruleNumber: 50,
+            protocol: -1, // All protocols
             ruleAction: 'deny',
             egress: false,
-            cidrBlock: '127.0.0.1/32', // Dummy CIDR to effectively disable this rule
-        });
-
-        // Delete the AWS default outbound rule 100 that allows all traffic
-        new CfnNetworkAclEntry(this, 'DeleteDefaultOutboundRule', {
-            networkAclId: defaultNaclId,
-            ruleNumber: 100,
-            protocol: -1,
-            ruleAction: 'deny',
-            egress: true,
-            cidrBlock: '127.0.0.1/32', // Dummy CIDR to effectively disable this rule
+            cidrBlock: '0.0.0.0/0',
         });
 
         // Inbound: Allow traffic from VPC CIDR (all ports)
         new CfnNetworkAclEntry(this, 'DefaultNaclInboundVpcOnly', {
             networkAclId: defaultNaclId,
-            ruleNumber: 90,
+            ruleNumber: 40,
             protocol: -1, // All protocols
             ruleAction: 'allow',
             egress: false,
             cidrBlock: vpcCidr,
         });
 
-        // Inbound: Allow specific ports from internet if configured
+        // Inbound: Allow specific ports from internet if configured (higher priority than deny)
         if (allowedPorts && allowedPorts.length > 0) {
             allowedPorts.forEach((port, index) => {
                 new CfnNetworkAclEntry(this, `DefaultNaclInboundPort${port}`, {
                     networkAclId: defaultNaclId,
-                    ruleNumber: 200 + index,
+                    ruleNumber: 30 + index,
                     protocol: 6, // TCP
                     ruleAction: 'allow',
                     egress: false,
@@ -474,9 +464,10 @@ export class Vpc extends Construct {
         }
 
         // Inbound: Allow ephemeral ports from internet for return traffic (external API calls)
+        // These are needed for Lambda/services in private subnets to receive responses from internet
         new CfnNetworkAclEntry(this, 'DefaultNaclInboundEphemeralFromInternet', {
             networkAclId: defaultNaclId,
-            ruleNumber: 300,
+            ruleNumber: 20,
             protocol: 6, // TCP
             ruleAction: 'allow',
             egress: false,
