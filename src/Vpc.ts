@@ -422,7 +422,7 @@ export class Vpc extends Construct {
         // Inbound: Allow traffic from VPC CIDR (all ports)
         new CfnNetworkAclEntry(this, 'DefaultNaclInboundVpcOnly', {
             networkAclId: defaultNaclId,
-            ruleNumber: 100,
+            ruleNumber: 90,
             protocol: -1, // All protocols
             ruleAction: 'allow',
             egress: false,
@@ -461,10 +461,20 @@ export class Vpc extends Construct {
             },
         });
 
+        // Inbound: DENY all other traffic (overrides default allow-all rule)
+        new CfnNetworkAclEntry(this, 'DefaultNaclInboundDenyAll', {
+            networkAclId: defaultNaclId,
+            ruleNumber: 32766,
+            protocol: -1,
+            ruleAction: 'deny',
+            egress: false,
+            cidrBlock: '0.0.0.0/0',
+        });
+
         // Outbound: Allow all traffic (for outbound connections to external APIs)
         new CfnNetworkAclEntry(this, 'DefaultNaclOutboundAll', {
             networkAclId: defaultNaclId,
-            ruleNumber: 100,
+            ruleNumber: 90,
             protocol: -1, // All protocols
             ruleAction: 'allow',
             egress: true,

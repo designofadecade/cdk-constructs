@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **CRITICAL: restrictDefaultNacl now properly blocks unauthorized traffic**
+  - Added explicit DENY rule (32766) to block all traffic not explicitly allowed
+  - Changed rule numbers to 90 (before AWS default rule 100) to ensure proper evaluation
+  - Fixes issue where default AWS NACL rules (allow all 0.0.0.0/0) were not overridden
+  - Now properly secures default NACL while allowing specified traffic
+
 ## [1.14.0] - 2026-03-11
 
 ### Added
