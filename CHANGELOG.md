@@ -9,11 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - **restrictDefaultNacl property for VPC construct**
-  - Lock down the VPC's default Network ACL to only allow VPC CIDR traffic
+  - Lock down the VPC's default Network ACL to allow VPC CIDR traffic and controlled internet access
   - Provides defense-in-depth security for subnets not explicitly associated with custom NACLs
   - Prevents accidental exposure if custom NACL associations are missed
   - Works alongside restrictPrivateSubnetNacls and restrictPublicSubnetNacls for maximum security
   - Automatically uses the VPC's actual CIDR block (no manual configuration needed)
+  - Allows ephemeral ports (1024-65535) from internet for return traffic (external API calls)
+  - Allows all outbound traffic for calling external APIs
+
+- **defaultNaclAllowedPorts property for VPC construct**
+  - Open specific TCP ports from internet on the default NACL (e.g., [80, 443])
+  - Only applies when restrictDefaultNacl is true
+  - Perfect for load balancers or public services using the default NACL
+  - Ephemeral ports automatically allowed for response traffic
 
 ## [1.13.0] - 2026-03-11
 

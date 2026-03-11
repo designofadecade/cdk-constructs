@@ -288,18 +288,54 @@ describe('Vpc', () => {
         // Should not create custom NACLs (uses default NACL)
         template.resourceCountIs('AWS::EC2::NetworkAcl', 0);
 
-        // Should create 2 NACL entries for the default NACL (1 ingress + 1 egress)
-        template.resourceCountIs('AWS::EC2::NetworkAclEntry', 2);
+        // Should create 3 NACL entries for the default NACL:
+        // - 1 inbound from VPC CIDR
+        // - 1 inbound ephemeral from internet (for return traffic)
+        // - 1 outbound all (for external API calls)
+        template.resourceCountIs('AWS::EC2::NetworkAclEntry', 3);
 
         // Should not create subnet associations (default NACL is automatically associated)
         template.resourceCountIs('AWS::EC2::SubnetNetworkAclAssociation', 0);
 
-        // Verify the entries restrict to VPC CIDR only
+        // Verify VPC CIDR inbound entry exists
         const entries = template.findResources('AWS::EC2::NetworkAclEntry');
-        Object.values(entries).forEach((entry: any) => {
-            expect(entry.Properties.Protocol).toBe(-1); // All protocols
-            expect(entry.Properties.RuleAction).toBe('allow');
-            // CidrBlock should be VPC CIDR (dynamically set via GetAtt)
+        const ingressEntries = Object.values(entries).filter((entry: any) => entry.Properties.Egress === false);
+        expect(ingressEntries.length).toBe(2); // VPC CIDR + ephemeral
+    });
+
+    it('allows specific ports from internet on default NACL', () => {
+        const app = new App();
+        const stack = new Stack(app, 'TestStack');
+
+        new Vpc(stack, 'TestVpc', {
+            name: 'test-vpc',
+            maxAzs: 2,
+            restrictDefaultNacl: true,
+            defaultNaclAllowedPorts: [80, 443], // Allow HTTP and HTTPS
+            stack: { id: 'test', tags: [] },
+        });
+
+        const template = Template.fromStack(stack);
+
+        // Should create 5 NACL entries:
+        // - 1 inbound from VPC CIDR
+        // - 2 inbound specific ports from internet (80, 443)
+        // - 1 inbound ephemeral from internet
+        // - 1 outbound all
+        template.resourceCountIs('AWS::EC2::NetworkAclEntry', 5);
+
+        // Verify port 80 and 443 rules exist
+        const entries = template.findResources('AWS::EC2::NetworkAclEntry');
+        const portRules = Object.values(entries).filter((entry: any) => {
+            const portRange = entry.Properties.PortRange;
+            return portRange && (portRange.From === 80 || portRange.From === 443);
+        });
+        expect(portRules.length).toBe(2);
+
+        // Verify they allow from internet (0.0.0.0/0)
+        portRules.forEach((rule: any) => {
+            expect(rule.Properties.CidrBlock).toBe('0.0.0.0/0');
+            expect(rule.Properties.Protocol).toBe(6); // TCP
         });
     });
 
@@ -321,11 +357,11 @@ describe('Vpc', () => {
         template.resourceCountIs('AWS::EC2::NetworkAcl', 2);
 
         // Should create:
-        // - 2 entries for default NACL (1 ingress + 1 egress)
+        // - 3 entries for default NACL (1 VPC inbound + 1 ephemeral inbound + 1 outbound)
         // - 3 entries for private egress NACL
         // - 3 entries for private isolated NACL
-        // Total = 2 + 3 + 3 = 8
-        template.resourceCountIs('AWS::EC2::NetworkAclEntry', 8);
+        // Total = 3 + 3 + 3 = 9
+        template.resourceCountIs('AWS::EC2::NetworkAclEntry', 9);
 
         // Verify NACL associations (4 private subnets only, public uses default)
         template.resourceCountIs('AWS::EC2::SubnetNetworkAclAssociation', 4);

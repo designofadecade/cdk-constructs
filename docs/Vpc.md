@@ -65,6 +65,7 @@ const vpc = new Vpc(this, 'MyVpc', {
 | `restrictPrivateSubnetNacls` | `boolean` | **false** | Enable restrictive NACLs (set `true` for new VPCs) |
 | `restrictPublicSubnetNacls` | `boolean` | **false** | Block internet access to public subnets (use when everything is behind API Gateway) |
 | `restrictDefaultNacl` | `boolean` | **false** | Lock down the default NACL to only allow VPC CIDR traffic (defense-in-depth) |
+| `defaultNaclAllowedPorts` | `number[]` | - | Specific TCP ports to allow from internet on default NACL (e.g., [80, 443]). Only applies when restrictDefaultNacl is true |
 | `allowedPorts` | `number[]` | - | Specific TCP ports to allow (e.g., [80, 443]). If not specified, all ports from VPC CIDR are allowed |
 | `stack` | `object` | Required | Stack reference with id and tags |
 
@@ -201,9 +202,36 @@ const vpc = new Vpc(this, 'SecureVpc', {
 - **No performance impact**: NACL rules are evaluated once at the subnet boundary
 
 **How it works:**
-- Modifies the VPC's default NACL to only allow traffic from VPC CIDR
+- Modifies the VPC's default NACL to allow traffic from VPC CIDR
+- Allows ephemeral ports (1024-65535) from internet for response traffic (external API calls)
+- Allows all outbound traffic (for calling external APIs)
 - Custom NACLs (from `restrictPrivateSubnetNacls` or `restrictPublicSubnetNacls`) take precedence
 - Subnets without custom NACLs automatically get restrictive rules via the default NACL
+
+#### Allow Specific Ports from Internet on Default NACL
+
+If you have a load balancer or public service using the default NACL, you can open specific ports:
+
+```typescript
+const vpc = new Vpc(this, 'WebVpc', {
+  name: 'web-vpc',
+  maxAzs: 2,
+  restrictDefaultNacl: true, // ✅ Lock down the default NACL
+  defaultNaclAllowedPorts: [80, 443], // ✅ Allow HTTP and HTTPS from internet
+  stack: { id: 'my-app', tags: [] },
+});
+```
+
+**This configuration:**
+- **Inbound**: Allows ports 80 and 443 from internet (0.0.0.0/0)
+- **Inbound**: Allows all traffic from VPC CIDR
+- **Inbound**: Allows ephemeral ports (1024-65535) from internet for return traffic
+- **Outbound**: Allows all traffic (for external API calls)
+
+**Use cases:**
+- Application Load Balancer in subnets using default NACL
+- Public EC2 instances without custom NACLs
+- Services that need specific internet-facing ports open
 
 **Example with full defense-in-depth:**
 ```typescript

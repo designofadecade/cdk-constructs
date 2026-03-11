@@ -115,6 +115,21 @@ export interface VpcProps {
      * take precedence over the default NACL for their associated subnets.
      */
     readonly restrictDefaultNacl?: boolean;
+
+    /**
+     * Specific TCP ports to allow from internet on the default NACL (optional)
+     * 
+     * Only applies when restrictDefaultNacl is true. Allows internet traffic on 
+     * specific ports while keeping all other ports locked down to VPC CIDR only.
+     * 
+     * Use this for load balancers or public-facing services in subnets using the default NACL.
+     * Ephemeral ports (1024-65535) are automatically allowed for response traffic.
+     * 
+     * @example
+     * defaultNaclAllowedPorts: [80, 443] // Allow HTTP and HTTPS from internet
+     * defaultNaclAllowedPorts: [22] // Allow SSH from internet
+     */
+    readonly defaultNaclAllowedPorts?: ReadonlyArray<number>;
 }
 
 /**
@@ -229,7 +244,7 @@ export class Vpc extends Construct {
 
         // Lock down the default NACL
         if (props.restrictDefaultNacl === true) {
-            this.#restrictDefaultNacl();
+            this.#restrictDefaultNacl(props.defaultNaclAllowedPorts);
         }
 
         // Tag the VPC itself
@@ -399,11 +414,11 @@ export class Vpc extends Construct {
      * Restricts the default Network ACL to only allow VPC CIDR traffic
      * This provides defense-in-depth for any subnets using the default NACL
      */
-    #restrictDefaultNacl(): void {
+    #restrictDefaultNacl(allowedPorts?: ReadonlyArray<number>): void {
         const vpcCidr = this.#vpc.vpcCidrBlock;
         const defaultNaclId = Fn.getAtt(this.#vpc.node.defaultChild!.logicalId, 'DefaultNetworkAcl').toString();
 
-        // Replace rule 100 inbound: Only allow traffic from VPC CIDR
+        // Inbound: Allow traffic from VPC CIDR (all ports)
         new CfnNetworkAclEntry(this, 'DefaultNaclInboundVpcOnly', {
             networkAclId: defaultNaclId,
             ruleNumber: 100,
@@ -413,14 +428,46 @@ export class Vpc extends Construct {
             cidrBlock: vpcCidr,
         });
 
-        // Replace rule 100 outbound: Only allow traffic to VPC CIDR
-        new CfnNetworkAclEntry(this, 'DefaultNaclOutboundVpcOnly', {
+        // Inbound: Allow specific ports from internet if configured
+        if (allowedPorts && allowedPorts.length > 0) {
+            allowedPorts.forEach((port, index) => {
+                new CfnNetworkAclEntry(this, `DefaultNaclInboundPort${port}`, {
+                    networkAclId: defaultNaclId,
+                    ruleNumber: 200 + index,
+                    protocol: 6, // TCP
+                    ruleAction: 'allow',
+                    egress: false,
+                    cidrBlock: '0.0.0.0/0',
+                    portRange: {
+                        from: port,
+                        to: port,
+                    },
+                });
+            });
+        }
+
+        // Inbound: Allow ephemeral ports from internet for return traffic (external API calls)
+        new CfnNetworkAclEntry(this, 'DefaultNaclInboundEphemeralFromInternet', {
+            networkAclId: defaultNaclId,
+            ruleNumber: 300,
+            protocol: 6, // TCP
+            ruleAction: 'allow',
+            egress: false,
+            cidrBlock: '0.0.0.0/0',
+            portRange: {
+                from: 1024,
+                to: 65535,
+            },
+        });
+
+        // Outbound: Allow all traffic (for outbound connections to external APIs)
+        new CfnNetworkAclEntry(this, 'DefaultNaclOutboundAll', {
             networkAclId: defaultNaclId,
             ruleNumber: 100,
             protocol: -1, // All protocols
             ruleAction: 'allow',
             egress: true,
-            cidrBlock: vpcCidr,
+            cidrBlock: '0.0.0.0/0',
         });
     }
 
