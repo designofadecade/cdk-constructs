@@ -1,5 +1,5 @@
 import { Construct } from 'constructs';
-import { Tags, Fn, CustomResource } from 'aws-cdk-lib';
+import { Tags, Fn } from 'aws-cdk-lib';
 import {
     Vpc as CdkVpc,
     CfnVPC,
@@ -17,7 +17,6 @@ import {
     SubnetSelection,
     CfnNetworkAclEntry,
 } from 'aws-cdk-lib/aws-ec2';
-import { AwsCustomResource, AwsCustomResourcePolicy, PhysicalResourceId } from 'aws-cdk-lib/custom-resources';
 
 /**
  * VPC endpoint types that can be created
@@ -425,27 +424,6 @@ export class Vpc extends Construct {
     #restrictDefaultNacl(vpcName: string, allowedPorts?: ReadonlyArray<number>): void {
         const vpcCidr = this.#vpc.vpcCidrBlock;
         const defaultNaclId = Fn.getAtt((this.#vpc.node.defaultChild as CfnVPC).logicalId, 'DefaultNetworkAcl').toString();
-
-        // Tag the default NACL with a name
-        new AwsCustomResource(this, 'DefaultNaclTagger', {
-            onCreate: {
-                service: 'EC2',
-                action: 'createTags',
-                parameters: {
-                    Resources: [defaultNaclId],
-                    Tags: [
-                        {
-                            Key: 'Name',
-                            Value: `${vpcName}-default-nacl`,
-                        },
-                    ],
-                },
-                physicalResourceId: PhysicalResourceId.of(`default-nacl-tags-${vpcName}`),
-            },
-            policy: AwsCustomResourcePolicy.fromSdkCalls({
-                resources: AwsCustomResourcePolicy.ANY_RESOURCE,
-            }),
-        });
 
         // Inbound: Allow traffic from VPC CIDR (all ports)
         new CfnNetworkAclEntry(this, 'DefaultNaclInboundVpcOnly', {

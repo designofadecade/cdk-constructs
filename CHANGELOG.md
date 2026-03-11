@@ -5,10 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.15.1] - 2026-03-11
+## [Unreleased]
 
-### Added
-- **Default NACL naming** - Default NACL is now automatically tagged with Name: `{vpcName}-default-nacl` for easy identification in AWS console
+### Removed
+- **Default NACL automatic naming** - Removed AwsCustomResource tagging to avoid creating Lambda function
+  - The automatic Name tag feature added unnecessary complexity (Lambda + IAM role)
+  - Default NACL can still be identified by its association with subnets
+  - Keeps the construct lightweight without extra resources
+
+## [1.15.1] - 2026-03-11
 
 ### Changed
 - **Improved documentation for restrictDefaultNacl**
