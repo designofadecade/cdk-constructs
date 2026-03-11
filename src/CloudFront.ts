@@ -168,6 +168,28 @@ export interface ResponseHeaderPolicyOptions {
 }
 
 /**
+ * CloudFront logging configuration
+ */
+export interface LoggingConfig {
+    /**
+     * The S3 bucket to store access logs
+     */
+    readonly bucket: IBucket;
+
+    /**
+     * Optional prefix for log files
+     * @default - no prefix
+     */
+    readonly prefix?: string;
+
+    /**
+     * Whether to include cookies in logs
+     * @default false
+     */
+    readonly includeCookies?: boolean;
+}
+
+/**
  * S3 bucket origin options
  */
 export interface S3BucketOriginOptions {
@@ -230,6 +252,29 @@ export interface CloudFrontProps {
      * Note: WAF for CloudFront must be created in us-east-1
      */
     readonly waf?: Waf | string;
+
+    /**
+     * Optional logging configuration
+     * When enabled, CloudFront will write access logs to the specified S3 bucket
+     * 
+     * @example
+     * ```typescript
+     * const logBucket = new S3Bucket(this, 'LogBucket', {
+     *   name: 'cloudfront-logs',
+     *   stack: { id: 'my-app', tags: [] },
+     * });
+     * 
+     * const cdn = new CloudFront(this, 'CDN', {
+     *   // ... other props
+     *   logging: {
+     *     bucket: logBucket.bucket,
+     *     prefix: 'cloudfront/',
+     *     includeCookies: true,
+     *   },
+     * });
+     * ```
+     */
+    readonly logging?: LoggingConfig;
 }
 
 /**
@@ -305,6 +350,10 @@ export class CloudFront extends Construct {
             defaultRootObject: 'index.html',
             httpVersion: 'http2and3' as any,
             webAclId,
+            enableLogging: props.logging !== undefined,
+            logBucket: props.logging?.bucket,
+            logFilePrefix: props.logging?.prefix,
+            logIncludesCookies: props.logging?.includeCookies ?? false,
             defaultBehavior: {
                 origin: props.defaultBehavior.origin,
                 cachePolicy: props.cachingDisabled === true ? CachePolicy.CACHING_DISABLED : CachePolicy.CACHING_OPTIMIZED,

@@ -126,4 +126,52 @@ describe('CloudFront', () => {
         expect(cloudfront.distributionId).toBeDefined();
         expect(cloudfront.distributionDomainName).toBeDefined();
     });
+
+    it('enables logging when configured', () => {
+        const app = new App();
+        const stack = new Stack(app, 'TestStack');
+        const bucket = new Bucket(stack, 'TestBucket');
+        const logBucket = new Bucket(stack, 'LogBucket');
+
+        new CloudFront(stack, 'TestDistribution', {
+            defaultBehavior: {
+                origin: CloudFront.S3BucketOrigin('origin', bucket),
+            },
+            logging: {
+                bucket: logBucket,
+                prefix: 'cloudfront-logs/',
+                includeCookies: true,
+            },
+            stack: { id: 'test', tags: [] },
+        });
+
+        const template = Template.fromStack(stack);
+        template.hasResourceProperties('AWS::CloudFront::Distribution', {
+            DistributionConfig: {
+                Logging: {
+                    Bucket: Match.anyValue(),
+                    Prefix: 'cloudfront-logs/',
+                    IncludeCookies: true,
+                },
+            },
+        });
+    });
+
+    it('disables logging when not configured', () => {
+        const app = new App();
+        const stack = new Stack(app, 'TestStack');
+        const bucket = new Bucket(stack, 'TestBucket');
+
+        new CloudFront(stack, 'TestDistribution', {
+            defaultBehavior: {
+                origin: CloudFront.S3BucketOrigin('origin', bucket),
+            },
+            stack: { id: 'test', tags: [] },
+        });
+
+        const template = Template.fromStack(stack);
+        const distribution = template.findResources('AWS::CloudFront::Distribution');
+        const distributionConfig = Object.values(distribution)[0].Properties.DistributionConfig;
+        expect(distributionConfig.Logging).toBeUndefined();
+    });
 });

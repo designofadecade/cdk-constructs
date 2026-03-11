@@ -5,10 +5,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.16.0] - 2026-03-11
 
 ### Added
-- **HttpApi: Access logs to CloudWatch and S3**
+- **HttpApi: Access 6.0 to CloudWatch and S3**
   - New `accessLogs` property to enable API Gateway access logging
   - Logs are sent to CloudWatch Logs by default
   - Optional S3 bucket reference for future CloudWatch to S3 export
@@ -18,7 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Automatically configures the default stage with access logging
   - Example: `accessLogs: true` or `accessLogs: { retention: RetentionDays.ONE_MONTH, s3Bucket: myBucket }`
 
-## [1.15.2] - 2026-03-11
+## [1.15.1] - 2026-03-11
 
 ### Removed
 - **Default NACL automatic naming** - Removed AwsCustomResource tagging to avoid creating Lambda function

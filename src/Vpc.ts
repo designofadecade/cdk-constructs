@@ -425,6 +425,26 @@ export class Vpc extends Construct {
         const vpcCidr = this.#vpc.vpcCidrBlock;
         const defaultNaclId = Fn.getAtt((this.#vpc.node.defaultChild as CfnVPC).logicalId, 'DefaultNetworkAcl').toString();
 
+        // Delete the AWS default inbound rule 100 that allows all traffic
+        new CfnNetworkAclEntry(this, 'DeleteDefaultInboundRule', {
+            networkAclId: defaultNaclId,
+            ruleNumber: 100,
+            protocol: -1,
+            ruleAction: 'deny',
+            egress: false,
+            cidrBlock: '127.0.0.1/32', // Dummy CIDR to effectively disable this rule
+        });
+
+        // Delete the AWS default outbound rule 100 that allows all traffic
+        new CfnNetworkAclEntry(this, 'DeleteDefaultOutboundRule', {
+            networkAclId: defaultNaclId,
+            ruleNumber: 100,
+            protocol: -1,
+            ruleAction: 'deny',
+            egress: true,
+            cidrBlock: '127.0.0.1/32', // Dummy CIDR to effectively disable this rule
+        });
+
         // Inbound: Allow traffic from VPC CIDR (all ports)
         new CfnNetworkAclEntry(this, 'DefaultNaclInboundVpcOnly', {
             networkAclId: defaultNaclId,
@@ -465,16 +485,6 @@ export class Vpc extends Construct {
                 from: 1024,
                 to: 65535,
             },
-        });
-
-        // Inbound: DENY all other traffic (overrides default allow-all rule)
-        new CfnNetworkAclEntry(this, 'DefaultNaclInboundDenyAll', {
-            networkAclId: defaultNaclId,
-            ruleNumber: 32766,
-            protocol: -1,
-            ruleAction: 'deny',
-            egress: false,
-            cidrBlock: '0.0.0.0/0',
         });
 
         // Outbound: Allow all traffic (for outbound connections to external APIs)

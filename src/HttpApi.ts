@@ -210,7 +210,7 @@ export class HttpApi extends Construct {
         // Configure access logs if enabled
         if (props.accessLogs) {
             const logsConfig = typeof props.accessLogs === 'boolean' ? {} : props.accessLogs;
-            
+
             // Create CloudWatch Log Group
             this.#logGroup = new LogGroup(this, 'AccessLogs', {
                 logGroupName: `/aws/apigateway/${props.name ?? props.stack.id}`,

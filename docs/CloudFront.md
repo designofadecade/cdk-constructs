@@ -10,6 +10,7 @@ CDK construct for creating CloudFront distributions with security best practices
 - S3 bucket origin support
 - Custom domain support
 - WAF integration ready
+- **Access logging to S3**
 
 ## Basic Usage
 
@@ -18,9 +19,70 @@ import { CloudFront } from '@designofadecade/cdk-constructs';
 
 const distribution = new CloudFront(this, 'Distribution', {
   name: 'my-distribution',
+  defaultBehavior: {
+    origin: CloudFront.S3BucketOrigin('origin', myBucket),
+  },
   stack: { id: 'my-app', tags: [] },
 });
 ```
+
+## Access Logging
+
+CloudFront can write access logs to an S3 bucket for monitoring, analysis, and compliance.
+
+### Enable Logging
+
+```typescript
+import { CloudFront } from '@designofadecade/cdk-constructs';
+import { S3Bucket } from '@designofadecade/cdk-constructs';
+
+// Create a bucket for logs
+const logBucket = new S3Bucket(this, 'CloudFrontLogs', {
+  name: 'cloudfront-logs',
+  stack: { id: 'my-app', tags: [] },
+});
+
+// Create distribution with logging
+const distribution = new CloudFront(this, 'Distribution', {
+  name: 'my-distribution',
+  defaultBehavior: {
+    origin: CloudFront.S3BucketOrigin('origin', myBucket),
+  },
+  logging: {
+    bucket: logBucket.bucket,
+    prefix: 'cloudfront/',        // Optional: organize logs in a folder
+    includeCookies: true,          // Optional: include cookies in logs (default: false)
+  },
+  stack: { id: 'my-app', tags: [] },
+});
+```
+
+### Logging Configuration
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `bucket` | `IBucket` | Required | S3 bucket for storing logs |
+| `prefix` | `string` | `''` | Prefix for log file names (e.g., 'cloudfront/') |
+| `includeCookies` | `boolean` | `false` | Whether to include cookies in access logs |
+
+### Log Format
+
+CloudFront access logs include:
+- Request date/time
+- Client IP address
+- Request method and path
+- Response status code
+- User agent
+- Referrer
+- Cookies (if `includeCookies: true`)
+
+### Best Practices for Logging
+
+1. **Separate log bucket** - Use a dedicated bucket for logs, not your origin bucket
+2. **Enable S3 lifecycle policies** - Automatically archive or delete old logs to save costs
+3. **Analyze logs** - Use Amazon Athena or CloudWatch Logs Insights for analysis
+4. **Secure the log bucket** - Restrict access to authorized personnel only
+5. **Consider costs** - Logging generates storage costs based on traffic volume
 
 ## Properties
 
@@ -30,9 +92,10 @@ const distribution = new CloudFront(this, 'Distribution', {
 |----------|------|---------|-------------|
 | `name` | `string` | Required | Distribution name |
 | `stack` | `object` | Required | Stack ID and tags |
+| `defaultBehavior` | `object` | Required | Default origin and behavior |
 | `domainName` | `string` | - | Custom domain name |
 | `certificate` | `ICertificate` | - | ACM certificate for custom domain |
-| `originBucket` | `IBucket` | - | S3 bucket origin |
+| `logging` | `LoggingConfig` | - | Access logging configuration |
 
 ## Getters
 
