@@ -288,25 +288,24 @@ describe('Vpc', () => {
         // Should not create custom NACLs (uses default NACL)
         template.resourceCountIs('AWS::EC2::NetworkAcl', 0);
 
-        // Should create 5 NACL entries for the default NACL:
-        // - 1 override inbound rule 100 (blocks AWS default allow-all)
-        // - 1 override outbound rule 100 (blocks AWS default allow-all)
-        // - 1 inbound from VPC CIDR
-        // - 1 inbound ephemeral from internet (for return traffic)
-        // - 1 outbound all (for external API calls)
-        template.resourceCountIs('AWS::EC2::NetworkAclEntry', 5);
+        // Should create 4 NACL entries for the default NACL:
+        // - 1 deny all inbound from internet (rule 50)
+        // - 1 allow inbound from VPC CIDR (rule 40)
+        // - 1 allow inbound ephemeral from internet for return traffic (rule 20)
+        // - 1 allow outbound all for external API calls (rule 90)
+        template.resourceCountIs('AWS::EC2::NetworkAclEntry', 4);
 
         // Should not create subnet associations (default NACL is automatically associated)
         template.resourceCountIs('AWS::EC2::SubnetNetworkAclAssociation', 0);
 
-        // Verify VPC CIDR inbound entry exists and override rules exist
+        // Verify VPC CIDR inbound entry exists
         const entries = template.findResources('AWS::EC2::NetworkAclEntry');
         const ingressEntries = Object.values(entries).filter((entry: any) => entry.Properties.Egress === false);
-        expect(ingressEntries.length).toBe(3); // Override rule 100 + VPC CIDR + ephemeral
+        expect(ingressEntries.length).toBe(3); // Deny all + VPC CIDR + ephemeral
 
-        // Verify deny rule exists (to override AWS default rule 100)
+        // Verify deny rule exists (rule 50 blocks all inbound from internet)
         const denyRules = Object.values(entries).filter((entry: any) => entry.Properties.RuleAction === 'deny');
-        expect(denyRules.length).toBe(2); // 1 inbound + 1 outbound override
+        expect(denyRules.length).toBe(1); // 1 inbound deny all
     });
 
     it('allows specific ports from internet on default NACL', () => {
@@ -323,14 +322,13 @@ describe('Vpc', () => {
 
         const template = Template.fromStack(stack);
 
-        // Should create 7 NACL entries:
-        // - 1 override inbound rule 100 (blocks AWS default allow-all)
-        // - 1 override outbound rule 100 (blocks AWS default allow-all)
-        // - 1 inbound from VPC CIDR
-        // - 2 inbound specific ports from internet (80, 443)
-        // - 1 inbound ephemeral from internet
-        // - 1 outbound all
-        template.resourceCountIs('AWS::EC2::NetworkAclEntry', 7);
+        // Should create 6 NACL entries:
+        // - 1 deny all inbound from internet (rule 50)
+        // - 1 allow inbound from VPC CIDR (rule 40)
+        // - 2 allow inbound specific ports from internet (rules 30, 31 for ports 80, 443)
+        // - 1 allow inbound ephemeral from internet (rule 20)
+        // - 1 allow outbound all (rule 90)
+        template.resourceCountIs('AWS::EC2::NetworkAclEntry', 6);
 
         // Verify port 80 and 443 rules exist
         const entries = template.findResources('AWS::EC2::NetworkAclEntry');
@@ -365,11 +363,11 @@ describe('Vpc', () => {
         template.resourceCountIs('AWS::EC2::NetworkAcl', 2);
 
         // Should create:
-        // - 5 entries for default NACL (2 override rules + 1 VPC inbound + 1 ephemeral inbound + 1 outbound)
+        // - 4 entries for default NACL (1 deny all + 1 VPC inbound + 1 ephemeral inbound + 1 outbound)
         // - 3 entries for private egress NACL
         // - 3 entries for private isolated NACL
-        // Total = 5 + 3 + 3 = 11
-        template.resourceCountIs('AWS::EC2::NetworkAclEntry', 11);
+        // Total = 4 + 3 + 3 = 10
+        template.resourceCountIs('AWS::EC2::NetworkAclEntry', 10);
 
         // Verify NACL associations (4 private subnets only, public uses default)
         template.resourceCountIs('AWS::EC2::SubnetNetworkAclAssociation', 4);
