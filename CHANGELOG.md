@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **restrictDefaultNacl property for VPC construct**
+  - Lock down the VPC's default Network ACL to only allow VPC CIDR traffic
+  - Provides defense-in-depth security for subnets not explicitly associated with custom NACLs
+  - Prevents accidental exposure if custom NACL associations are missed
+  - Works alongside restrictPrivateSubnetNacls and restrictPublicSubnetNacls for maximum security
+  - Automatically uses the VPC's actual CIDR block (no manual configuration needed)
+
 ## [1.13.0] - 2026-03-11
 
 ### Added

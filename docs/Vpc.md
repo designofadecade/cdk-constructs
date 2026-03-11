@@ -62,7 +62,10 @@ const vpc = new Vpc(this, 'MyVpc', {
 | `maxAzs` | `number` | 2 | Maximum availability zones |
 | `natGateways` | `number` | 0 | Number of NAT Gateways (0 = none, cost optimization) |
 | `endpoints` | `VpcEndpointType[]` | - | VPC endpoints: 'sqs', 'secrets-manager', 's3' |
-| `restrictPrivateSubnetNacls` | `boolean` | **false** | Enable restrictive NACLs (set `true` for new VPCs) || `restrictPublicSubnetNacls` | `boolean` | **false** | Block internet access to public subnets (use when everything is behind API Gateway) || `allowedPorts` | `number[]` | - | Specific TCP ports to allow (e.g., [80, 443]). If not specified, all ports from VPC CIDR are allowed |
+| `restrictPrivateSubnetNacls` | `boolean` | **false** | Enable restrictive NACLs (set `true` for new VPCs) |
+| `restrictPublicSubnetNacls` | `boolean` | **false** | Block internet access to public subnets (use when everything is behind API Gateway) |
+| `restrictDefaultNacl` | `boolean` | **false** | Lock down the default NACL to only allow VPC CIDR traffic (defense-in-depth) |
+| `allowedPorts` | `number[]` | - | Specific TCP ports to allow (e.g., [80, 443]). If not specified, all ports from VPC CIDR are allowed |
 | `stack` | `object` | Required | Stack reference with id and tags |
 
 ## Getters
@@ -175,6 +178,45 @@ const vpc = new Vpc(this, 'FullyPrivateVpc', {
 - Application Load Balancers in public subnets
 - Public-facing EC2 instances
 - Internet Gateway access
+
+### Lock Down the Default NACL (Defense-in-Depth)
+
+AWS automatically creates a **default Network ACL** for every VPC that allows all traffic (0.0.0.0/0). Any subnet not explicitly associated with a custom NACL will use this permissive default.
+
+For maximum security, lock down the default NACL to only allow VPC CIDR traffic:
+
+```typescript
+const vpc = new Vpc(this, 'SecureVpc', {
+  name: 'secure-vpc',
+  maxAzs: 2,
+  restrictDefaultNacl: true, // ✅ Lock down the default NACL
+  restrictPrivateSubnetNacls: true, // ✅ Custom NACLs for private subnets
+  stack: { id: 'my-app', tags: [] },
+});
+```
+
+**Why use this?**
+- **Defense-in-depth**: Even if a subnet isn't associated with a custom NACL, it's still protected
+- **Prevents misconfigurations**: Accidentally forgetting to apply a custom NACL won't expose resources
+- **No performance impact**: NACL rules are evaluated once at the subnet boundary
+
+**How it works:**
+- Modifies the VPC's default NACL to only allow traffic from VPC CIDR
+- Custom NACLs (from `restrictPrivateSubnetNacls` or `restrictPublicSubnetNacls`) take precedence
+- Subnets without custom NACLs automatically get restrictive rules via the default NACL
+
+**Example with full defense-in-depth:**
+```typescript
+const vpc = new Vpc(this, 'MaxSecurityVpc', {
+  name: 'max-security-vpc',
+  maxAzs: 2,
+  restrictDefaultNacl: true, // ✅ Fallback protection
+  restrictPrivateSubnetNacls: true, // ✅ Private subnet NACLs
+  restrictPublicSubnetNacls: true, // ✅ Public subnet NACLs (if needed)
+  endpoints: ['s3', 'secrets-manager'],
+  stack: { id: 'my-app', tags: [] },
+});
+```
 
 ### Disable NACL Restrictions
 

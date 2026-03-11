@@ -271,4 +271,63 @@ describe('Vpc', () => {
         // Verify NACL associations (2 public + 4 private = 6 total)
         template.resourceCountIs('AWS::EC2::SubnetNetworkAclAssociation', 6);
     });
+
+    it('restricts default NACL when restrictDefaultNacl is enabled', () => {
+        const app = new App();
+        const stack = new Stack(app, 'TestStack');
+
+        new Vpc(stack, 'TestVpc', {
+            name: 'test-vpc',
+            maxAzs: 2,
+            restrictDefaultNacl: true,
+            stack: { id: 'test', tags: [] },
+        });
+
+        const template = Template.fromStack(stack);
+
+        // Should not create custom NACLs (uses default NACL)
+        template.resourceCountIs('AWS::EC2::NetworkAcl', 0);
+
+        // Should create 2 NACL entries for the default NACL (1 ingress + 1 egress)
+        template.resourceCountIs('AWS::EC2::NetworkAclEntry', 2);
+
+        // Should not create subnet associations (default NACL is automatically associated)
+        template.resourceCountIs('AWS::EC2::SubnetNetworkAclAssociation', 0);
+
+        // Verify the entries restrict to VPC CIDR only
+        const entries = template.findResources('AWS::EC2::NetworkAclEntry');
+        Object.values(entries).forEach((entry: any) => {
+            expect(entry.Properties.Protocol).toBe(-1); // All protocols
+            expect(entry.Properties.RuleAction).toBe('allow');
+            // CidrBlock should be VPC CIDR (dynamically set via GetAtt)
+        });
+    });
+
+    it('combines default NACL restriction with custom NACLs', () => {
+        const app = new App();
+        const stack = new Stack(app, 'TestStack');
+
+        new Vpc(stack, 'TestVpc', {
+            name: 'test-vpc',
+            maxAzs: 2,
+            restrictDefaultNacl: true, // Restrict default
+            restrictPrivateSubnetNacls: true, // Custom NACLs for private subnets
+            stack: { id: 'test', tags: [] },
+        });
+
+        const template = Template.fromStack(stack);
+
+        // Should create 2 custom NACLs (private-egress + private-isolated)
+        template.resourceCountIs('AWS::EC2::NetworkAcl', 2);
+
+        // Should create:
+        // - 2 entries for default NACL (1 ingress + 1 egress)
+        // - 3 entries for private egress NACL
+        // - 3 entries for private isolated NACL
+        // Total = 2 + 3 + 3 = 8
+        template.resourceCountIs('AWS::EC2::NetworkAclEntry', 8);
+
+        // Verify NACL associations (4 private subnets only, public uses default)
+        template.resourceCountIs('AWS::EC2::SubnetNetworkAclAssociation', 4);
+    });
 });

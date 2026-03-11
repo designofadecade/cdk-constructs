@@ -1,5 +1,5 @@
 import { Construct } from 'constructs';
-import { Tags } from 'aws-cdk-lib';
+import { Tags, Fn } from 'aws-cdk-lib';
 import {
     Vpc as CdkVpc,
     SubnetType,
@@ -14,6 +14,7 @@ import {
     Action,
     TrafficDirection,
     SubnetSelection,
+    CfnNetworkAclEntry,
 } from 'aws-cdk-lib/aws-ec2';
 
 /**
@@ -99,6 +100,21 @@ export interface VpcProps {
      * allowedPorts: [5432] // Only allow PostgreSQL
      */
     readonly allowedPorts?: ReadonlyArray<number>;
+
+    /**
+     * Lock down the default Network ACL to only allow VPC CIDR traffic (default: false)
+     * 
+     * When enabled, modifies the VPC's default NACL to only allow traffic from within 
+     * the VPC CIDR range. This provides defense-in-depth by ensuring any subnets not 
+     * explicitly associated with custom NACLs still have restrictive rules.
+     * 
+     * **Recommended**: Set to `true` for NEW VPCs to prevent accidental exposure.
+     * Default is `false` to maintain backward compatibility with existing deployments.
+     * 
+     * **Note**: Custom NACLs (from restrictPrivateSubnetNacls or restrictPublicSubnetNacls) 
+     * take precedence over the default NACL for their associated subnets.
+     */
+    readonly restrictDefaultNacl?: boolean;
 }
 
 /**
@@ -209,6 +225,11 @@ export class Vpc extends Construct {
         // Configure restrictive Network ACLs for public subnets
         if (props.restrictPublicSubnetNacls === true) {
             this.#configurePublicSubnetNacls(vpcName);
+        }
+
+        // Lock down the default NACL
+        if (props.restrictDefaultNacl === true) {
+            this.#restrictDefaultNacl();
         }
 
         // Tag the VPC itself
@@ -371,6 +392,35 @@ export class Vpc extends Construct {
             publicNacl.associateWithSubnet(`PublicAssoc${index}`, {
                 subnets: [subnet],
             });
+        });
+    }
+
+    /**
+     * Restricts the default Network ACL to only allow VPC CIDR traffic
+     * This provides defense-in-depth for any subnets using the default NACL
+     */
+    #restrictDefaultNacl(): void {
+        const vpcCidr = this.#vpc.vpcCidrBlock;
+        const defaultNaclId = Fn.getAtt(this.#vpc.node.defaultChild!.logicalId, 'DefaultNetworkAcl').toString();
+
+        // Replace rule 100 inbound: Only allow traffic from VPC CIDR
+        new CfnNetworkAclEntry(this, 'DefaultNaclInboundVpcOnly', {
+            networkAclId: defaultNaclId,
+            ruleNumber: 100,
+            protocol: -1, // All protocols
+            ruleAction: 'allow',
+            egress: false,
+            cidrBlock: vpcCidr,
+        });
+
+        // Replace rule 100 outbound: Only allow traffic to VPC CIDR
+        new CfnNetworkAclEntry(this, 'DefaultNaclOutboundVpcOnly', {
+            networkAclId: defaultNaclId,
+            ruleNumber: 100,
+            protocol: -1, // All protocols
+            ruleAction: 'allow',
+            egress: true,
+            cidrBlock: vpcCidr,
         });
     }
 
