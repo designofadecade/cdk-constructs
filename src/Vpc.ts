@@ -232,7 +232,7 @@ export class Vpc extends Construct {
 
         // Inbound: Allow traffic from VPC CIDR (all ports or specific ports)
         if (allowedPorts && allowedPorts.length > 0) {
-            // Add specific port rules
+            // Add specific port rules from VPC CIDR
             allowedPorts.forEach((port, index) => {
                 privateEgressNacl.addEntry(`AllowInboundPort${port}`, {
                     cidr: AclCidr.ipv4(vpcCidr),
@@ -241,14 +241,6 @@ export class Vpc extends Construct {
                     direction: TrafficDirection.INGRESS,
                     ruleAction: Action.ALLOW,
                 });
-            });
-            // Allow ephemeral ports for return traffic (required for stateless NACLs)
-            privateEgressNacl.addEntry('AllowEphemeralPorts', {
-                cidr: AclCidr.ipv4(vpcCidr),
-                ruleNumber: 200,
-                traffic: AclTraffic.tcpPortRange(1024, 65535),
-                direction: TrafficDirection.INGRESS,
-                ruleAction: Action.ALLOW,
             });
         } else {
             // Allow all traffic from VPC CIDR
@@ -260,6 +252,16 @@ export class Vpc extends Construct {
                 ruleAction: Action.ALLOW,
             });
         }
+
+        // Allow ephemeral ports from internet for return traffic (Lambda calling external APIs)
+        // This is safe because connections must be initiated from inside the VPC
+        privateEgressNacl.addEntry('AllowEphemeralPortsFromInternet', {
+            cidr: AclCidr.anyIpv4(),
+            ruleNumber: 200,
+            traffic: AclTraffic.tcpPortRange(1024, 65535),
+            direction: TrafficDirection.INGRESS,
+            ruleAction: Action.ALLOW,
+        });
 
         // Outbound: Allow all traffic (for VPC endpoints, NAT gateway, etc.)
         privateEgressNacl.addEntry('AllowAllOutbound', {
@@ -285,7 +287,7 @@ export class Vpc extends Construct {
 
         // Inbound: Allow traffic from VPC CIDR (all ports or specific ports)
         if (allowedPorts && allowedPorts.length > 0) {
-            // Add specific port rules
+            // Add specific port rules from VPC CIDR
             allowedPorts.forEach((port, index) => {
                 privateIsolatedNacl.addEntry(`AllowInboundPort${port}`, {
                     cidr: AclCidr.ipv4(vpcCidr),
@@ -295,16 +297,8 @@ export class Vpc extends Construct {
                     ruleAction: Action.ALLOW,
                 });
             });
-            // Allow ephemeral ports for return traffic
-            privateIsolatedNacl.addEntry('AllowEphemeralPorts', {
-                cidr: AclCidr.ipv4(vpcCidr),
-                ruleNumber: 200,
-                traffic: AclTraffic.tcpPortRange(1024, 65535),
-                direction: TrafficDirection.INGRESS,
-                ruleAction: Action.ALLOW,
-            });
         } else {
-            // Allow all traffic from VPC CIDR
+            // Allow all traffic from VPC CIDR only
             privateIsolatedNacl.addEntry('AllowInboundFromVpc', {
                 cidr: AclCidr.ipv4(vpcCidr),
                 ruleNumber: 100,
@@ -313,6 +307,16 @@ export class Vpc extends Construct {
                 ruleAction: Action.ALLOW,
             });
         }
+
+        // Allow ephemeral ports from VPC CIDR only for return traffic
+        // Isolated subnets should NOT receive traffic from internet
+        privateIsolatedNacl.addEntry('AllowEphemeralPortsFromVpc', {
+            cidr: AclCidr.ipv4(vpcCidr),
+            ruleNumber: 200,
+            traffic: AclTraffic.tcpPortRange(1024, 65535),
+            direction: TrafficDirection.INGRESS,
+            ruleAction: Action.ALLOW,
+        });
 
         // Outbound: Allow traffic only to VPC CIDR (fully isolated)
         privateIsolatedNacl.addEntry('AllowOutboundToVpc', {

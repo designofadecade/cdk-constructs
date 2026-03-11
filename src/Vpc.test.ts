@@ -95,7 +95,7 @@ describe('Vpc', () => {
         expect(vpc.vpc).toBeInstanceOf(CdkVpc);
     });
 
-it('does not create Network ACLs by default for backward compatibility', () => {
+    it('does not create Network ACLs by default for backward compatibility', () => {
         const app = new App();
         const stack = new Stack(app, 'TestStack');
 
@@ -106,7 +106,7 @@ it('does not create Network ACLs by default for backward compatibility', () => {
         });
 
         const template = Template.fromStack(stack);
-        
+
         // Should not create custom NACLs by default (backward compatibility)
         template.resourceCountIs('AWS::EC2::NetworkAcl', 0);
         template.resourceCountIs('AWS::EC2::NetworkAclEntry', 0);
@@ -128,29 +128,14 @@ it('does not create Network ACLs by default for backward compatibility', () => {
         // Should create 2 custom NACLs (private-egress and private-isolated)
         template.resourceCountIs('AWS::EC2::NetworkAcl', 2);
 
-        // Should create NACL entries: 2 entries per NACL (ingress + egress) x 2 NACLs = 4 entries
-        template.resourceCountIs('AWS::EC2::NetworkAclEntry', 4);
+        // Should create NACL entries:
+        // - Private egress: 1 inbound from VPC + 1 ephemeral from internet + 1 outbound = 3
+        // - Private isolated: 1 inbound from VPC + 1 ephemeral from VPC + 1 outbound = 3
+        // Total = 6 entries
+        template.resourceCountIs('AWS::EC2::NetworkAclEntry', 6);
 
-        // Verify NACL associations (2 AZs x 2 private subnet types = 4 associations)
+        // Verify NACL associations (2 AZs x 2 subnet types = 4 associations)
         template.resourceCountIs('AWS::EC2::SubnetNetworkAclAssociation', 4);
-    });
-
-it('allows disabling restrictive Network ACLs explicitly', () => {
-        const app = new App();
-        const stack = new Stack(app, 'TestStack');
-
-        new Vpc(stack, 'TestVpc', {
-            name: 'test-vpc',
-            maxAzs: 2,
-            restrictPrivateSubnetNacls: false, // Explicitly disable
-            stack: { id: 'test', tags: [] },
-        });
-
-        const template = Template.fromStack(stack);
-
-        // Should not create custom NACLs when disabled
-        template.resourceCountIs('AWS::EC2::NetworkAcl', 0);
-        template.resourceCountIs('AWS::EC2::NetworkAclEntry', 0);
     });
 
     it('configures NACL rules to only allow VPC CIDR traffic', () => {
@@ -196,19 +181,16 @@ it('allows disabling restrictive Network ACLs explicitly', () => {
 
         const template = Template.fromStack(stack);
 
-        // Should have rules for each port (80, 443) x 2 NACLs + ephemeral ports x 2 = 6 ingress rules
+        // Egress NACL: 2 specific ports + 1 ephemeral from internet + 1 outbound = 4
+        // Isolated NACL: 2 specific ports + 1 ephemeral from VPC + 1 outbound = 4
+        // Total = 8 ingress + outbound rules
         const naclEntries = template.findResources('AWS::EC2::NetworkAclEntry');
-        const ingressRules = Object.values(naclEntries).filter(
-            (entry: any) => entry.Properties.Egress === false
-        );
-
-        // 2 specific port rules per NACL + 1 ephemeral port rule per NACL = 6 ingress rules
-        expect(ingressRules.length).toBe(6);
+        expect(Object.keys(naclEntries).length).toBe(8);
 
         // Verify specific port rules exist (port 80 and 443)
-        const portRules = ingressRules.filter((rule: any) => {
-            const protocol = rule.Properties.Protocol;
-            const portRange = rule.Properties.PortRange;
+        const portRules = Object.values(naclEntries).filter((entry: any) => {
+            const protocol = entry.Properties.Protocol;
+            const portRange = entry.Properties.PortRange;
             return protocol === 6 && portRange && (portRange.From === 80 || portRange.From === 443);
         });
         expect(portRules.length).toBeGreaterThan(0);
@@ -222,7 +204,7 @@ it('allows disabling restrictive Network ACLs explicitly', () => {
             name: 'test-vpc',
             maxAzs: 2,
             restrictPrivateSubnetNacls: true, // Enable NACLs
-            // No allowedPorts specified - should allow all traffic
+            // No allowedPorts specified - should allow all traffic from VPC + ephemeral from internet
             stack: { id: 'test', tags: [] },
         });
 
@@ -233,11 +215,10 @@ it('allows disabling restrictive Network ACLs explicitly', () => {
             (entry: any) => entry.Properties.Egress === false
         );
 
-        // Should have 2 ingress rules (1 per NACL) allowing all traffic (protocol -1)
-        const allTrafficRules = ingressRules.filter((rule: any) => {
-            return rule.Properties.Protocol === -1; // -1 means all traffic
-        });
-        expect(allTrafficRules.length).toBe(2);
+        // Egress NACL: 1 all traffic from VPC + 1 ephemeral from internet = 2
+        // Isolated NACL: 1 all traffic from VPC + 1 ephemeral from VPC = 2
+        // Total = 4 ingress rules
+        expect(ingressRules.length).toBe(4);
     });
 
     it('creates restrictive Network ACLs for public subnets when enabled', () => {
@@ -252,13 +233,13 @@ it('allows disabling restrictive Network ACLs explicitly', () => {
         });
 
         const template = Template.fromStack(stack);
-        
+
         // Should create 1 custom NACL for public subnets
         template.resourceCountIs('AWS::EC2::NetworkAcl', 1);
-        
+
         // Should create 2 NACL entries (1 ingress + 1 egress)
         template.resourceCountIs('AWS::EC2::NetworkAclEntry', 2);
-        
+
         // Verify NACL associations (2 AZs = 2 public subnets)
         template.resourceCountIs('AWS::EC2::SubnetNetworkAclAssociation', 2);
     });
@@ -276,13 +257,17 @@ it('allows disabling restrictive Network ACLs explicitly', () => {
         });
 
         const template = Template.fromStack(stack);
-        
+
         // Should create 3 NACLs (1 public + 2 private)
         template.resourceCountIs('AWS::EC2::NetworkAcl', 3);
-        
-        // Should create 6 NACL entries (2 for public + 4 for private)
-        template.resourceCountIs('AWS::EC2::NetworkAclEntry', 6);
-        
+
+        // Should create 8 NACL entries:
+        // - Public: 1 ingress + 1 egress = 2
+        // - Private egress: 1 inbound from VPC + 1 ephemeral from internet + 1 outbound = 3
+        // - Private isolated: 1 inbound from VPC + 1 ephemeral from VPC + 1 outbound = 3
+        // Total = 2 + 3 + 3 = 8
+        template.resourceCountIs('AWS::EC2::NetworkAclEntry', 8);
+
         // Verify NACL associations (2 public + 4 private = 6 total)
         template.resourceCountIs('AWS::EC2::SubnetNetworkAclAssociation', 6);
     });

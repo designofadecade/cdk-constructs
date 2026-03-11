@@ -7,13 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.13.0] - 2026-03-11
+
 ### Added
 - **Network ACL restrictions for public subnets**
   - `restrictPublicSubnetNacls` property to block internet access (0.0.0.0/0) to public subnets
   - Useful when all services are behind API Gateway and no public-facing resources are needed
   - Blocks both inbound and outbound internet traffic on public subnets
   - Only allows traffic within VPC CIDR range
+  - Automatically uses VPC's actual CIDR block (no manual configuration needed)
   - Comprehensive test coverage with 14 passing VPC tests
+
+### Fixed
+- **Network ACL support for Lambda external API calls**
+  - Private egress subnet NACLs now allow ephemeral port responses (1024-65535) from internet (0.0.0.0/0)
+  - Enables Lambda functions in VPC to call external APIs (Stripe, SendGrid, etc.)
+  - Private isolated subnet NACLs still restrict ephemeral ports to VPC CIDR only for enhanced RDS security
+  - Maintains defense-in-depth: Security Groups provide primary control, NACLs provide backup layer
 
 ## [1.12.1] - 2026-03-11
 
