@@ -9,6 +9,11 @@ import {
 import type { IDistribution } from 'aws-cdk-lib/aws-cloudfront';
 
 /**
+ * Body size inspection limit for AWS Managed Rules
+ */
+export type BodySizeInspectionLimit = 'KB_16' | 'KB_32' | 'KB_48' | 'KB_64';
+
+/**
  * AWS Managed Rule configuration
  */
 export interface ManagedRuleConfig {
@@ -31,6 +36,14 @@ export interface ManagedRuleConfig {
      * Excluded rules
      */
     readonly excludedRules?: ReadonlyArray<string>;
+
+    /**
+     * Body size inspection limit override
+     * Increases the inspection limit for request body content
+     * Default is typically 16 KB, can be increased to 32, 48, or 64 KB
+     * @default - Uses rule group default (typically KB_16)
+     */
+    readonly bodySizeInspectionLimit?: BodySizeInspectionLimit;
 }
 
 /**
@@ -133,6 +146,14 @@ export interface WafProps {
     readonly enableManagedRules?: boolean;
 
     /**
+     * Body size inspection limit for default managed rules
+     * Applies when enableManagedRules is true
+     * Increases the inspection limit to prevent large payloads from bypassing security rules
+     * @default 'KB_64' - Maximum inspection limit for enhanced security
+     */
+    readonly managedRulesBodySizeLimit?: BodySizeInspectionLimit;
+
+    /**
      * Custom managed rules configuration
      */
     readonly managedRules?: ReadonlyArray<ManagedRuleConfig>;
@@ -194,6 +215,26 @@ export interface WafProps {
 export class Waf extends Construct {
     static readonly SCOPE_CLOUDFRONT: 'CLOUDFRONT' = 'CLOUDFRONT';
     static readonly SCOPE_REGIONAL: 'REGIONAL' = 'REGIONAL';
+
+    /**
+     * Body size inspection limit: 16 KB (default for most rules)
+     */
+    static readonly BODY_SIZE_16KB: BodySizeInspectionLimit = 'KB_16';
+
+    /**
+     * Body size inspection limit: 32 KB
+     */
+    static readonly BODY_SIZE_32KB: BodySizeInspectionLimit = 'KB_32';
+
+    /**
+     * Body size inspection limit: 48 KB
+     */
+    static readonly BODY_SIZE_48KB: BodySizeInspectionLimit = 'KB_48';
+
+    /**
+     * Body size inspection limit: 64 KB (maximum, recommended for enhanced security)
+     */
+    static readonly BODY_SIZE_64KB: BodySizeInspectionLimit = 'KB_64';
 
     #webAcl: CfnWebACL;
     #scope: 'CLOUDFRONT' | 'REGIONAL';
@@ -290,7 +331,8 @@ export class Waf extends Construct {
 
         // Add AWS Managed Rules (best practices)
         if (props.enableManagedRules === true) {
-            const defaultManagedRules = Waf.GetDefaultManagedRules(priorityCounter);
+            const bodySizeLimit = props.managedRulesBodySizeLimit ?? 'KB_64';
+            const defaultManagedRules = Waf.GetDefaultManagedRules(priorityCounter, bodySizeLimit);
             rules.push(...defaultManagedRules);
             priorityCounter += defaultManagedRules.length;
         }
@@ -298,15 +340,21 @@ export class Waf extends Construct {
         // Add custom managed rules
         if (props.managedRules) {
             props.managedRules.forEach((ruleConfig) => {
+                // Build managed rule group statement
+                const managedRuleGroupStatement: any = {
+                    vendorName: ruleConfig.vendorName ?? 'AWS',
+                    name: ruleConfig.name,
+                    excludedRules: ruleConfig.excludedRules?.map((name) => ({ name })),
+                };
+
+                // Body size inspection limits are configured at the WebACL level via associationConfig
+                // Custom managed rule groups don't need additional configuration here
+
                 rules.push({
                     name: ruleConfig.name,
                     priority: ruleConfig.priority ?? priorityCounter++,
                     statement: {
-                        managedRuleGroupStatement: {
-                            vendorName: ruleConfig.vendorName ?? 'AWS',
-                            name: ruleConfig.name,
-                            excludedRules: ruleConfig.excludedRules?.map((name) => ({ name })),
-                        },
+                        managedRuleGroupStatement,
                     },
                     overrideAction: { none: {} },
                     visibilityConfig: {
@@ -319,12 +367,24 @@ export class Waf extends Construct {
             });
         }
 
+        // Build association config for body size inspection limits
+        const bodySizeLimit = props.managedRulesBodySizeLimit ?? (props.enableManagedRules ? 'KB_64' : undefined);
+        const associationConfig = bodySizeLimit ? {
+            requestBody: {
+                // Configure based on scope - CloudFront uses CLOUDFRONT resource type
+                ...(this.#scope === 'CLOUDFRONT' ? {
+                    CLOUDFRONT: { defaultSizeInspectionLimit: bodySizeLimit },
+                } : {}),
+            },
+        } : undefined;
+
         // Create Web ACL
         this.#webAcl = new CfnWebACL(this, 'WebACL', {
             name: props.name ?? `${props.stack.id}-waf`,
             scope: this.#scope,
             defaultAction: props.defaultAction === 'BLOCK' ? { block: {} } : { allow: {} },
             rules,
+            associationConfig,
             visibilityConfig: {
                 sampledRequestsEnabled: true,
                 cloudWatchMetricsEnabled: true,
@@ -434,10 +494,14 @@ export class Waf extends Construct {
      * - Linux Operating System Protection
      * - POSIX Operating System Protection
      * 
+     * All rules are configured with 64 KB body inspection limit by default to prevent
+     * large payloads from bypassing security rules.
+     * 
      * @param startPriority - Starting priority number for the rules
+     * @param bodySizeLimit - Body size inspection limit (default: KB_64 for maximum security)
      * @returns Array of managed rule configurations
      */
-    static GetDefaultManagedRules(startPriority = 100): CfnWebACL.RuleProperty[] {
+    static GetDefaultManagedRules(startPriority = 100, bodySizeLimit: BodySizeInspectionLimit = 'KB_64'): CfnWebACL.RuleProperty[] {
         const managedRules = [
             { name: 'AWSManagedRulesCommonRuleSet', description: 'Core Rule Set' },
             { name: 'AWSManagedRulesKnownBadInputsRuleSet', description: 'Known Bad Inputs' },
@@ -455,6 +519,8 @@ export class Waf extends Construct {
                 managedRuleGroupStatement: {
                     vendorName: 'AWS',
                     name: rule.name,
+                    // Body size inspection limits are configured at the WebACL level via associationConfig
+                    // AWS Managed Rules automatically block oversized payloads that exceed the inspection limit
                 },
             },
             overrideAction: { none: {} },

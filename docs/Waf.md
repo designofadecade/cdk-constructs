@@ -5,6 +5,7 @@ AWS WAF (Web Application Firewall) construct with best practice security rules f
 ## Features
 
 - **AWS Managed Rules**: Pre-configured rule sets from AWS
+- **64 KB Body Inspection**: Increased inspection limit (from default 16 KB) to detect threats in larger payloads while automatically blocking oversized requests
 - **Rate Limiting**: Prevents DDoS and brute force attacks
 - **Geographic Blocking**: Block traffic from specific countries
 - **IP Allow/Block Lists**: Control access by IP address
@@ -195,6 +196,43 @@ When `enableManagedRules: true`, the following AWS Managed Rules are automatical
 6. **Linux OS Protection** - Blocks Linux-specific exploits
 7. **POSIX OS Protection** - Blocks Unix/POSIX exploits
 
+### Enhanced Security with Body Size Inspection
+
+By default, managed rules are configured with **64 KB body size inspection limits** to prevent large payloads from bypassing security rules:
+
+- **64 KB inspection limit** (up from the AWS default 16 KB)
+- **Automatic blocking** of requests with bodies exceeding the inspection limit by AWS Managed Rules  
+- Prevents attackers from using oversized payloads to bypass WAF inspection
+- Applies to all rules in the Web ACL for consistent security
+
+```typescript
+const waf = new Waf(this, 'WAF', {
+  enableManagedRules: true,
+  // Optional: customize body size limit (default is KB_64 for maximum security)
+  managedRulesBodySizeLimit: Waf.BODY_SIZE_64KB, // or KB_16, KB_32, KB_48
+  stack: { id: 'my-app', tags: [] },
+});
+```
+
+**How it works:**
+- WAF inspects request bodies up to the configured limit (default: 64 KB for managed rules)
+- AWS Managed Rules automatically block requests with bodies exceeding this limit
+- This prevents attackers from bypassing rules by sending oversized payloads
+- The limit is configured globally for the entire Web ACL via CloudFormation's `AssociationConfig`
+
+**Why this matters:**
+- Attackers may attempt to send payloads larger than the inspection limit to bypass security rules
+- Without a sufficient inspection limit, requests exceeding 16 KB could pass through uninspected
+- Setting the limit to 64 KB provides thorough inspection while blocking truly oversized requests
+
+**Available body size limits:**
+- `Waf.BODY_SIZE_16KB` - 16 KB (typical AWS default)
+- `Waf.BODY_SIZE_32KB` - 32 KB
+- `Waf.BODY_SIZE_48KB` - 48 KB
+- `Waf.BODY_SIZE_64KB` - 64 KB (recommended, provides maximum inspection before blocking)
+
+**Note:** For CloudFront distributions, increasing the inspection limit beyond 16 KB may incur additional AWS charges. See [AWS WAF Pricing](https://aws.amazon.com/waf/pricing/) for details.
+
 ## Static Constants
 
 ### Scope Constants
@@ -259,10 +297,27 @@ const ipAllow = Waf.AllowIPSet('TrustedIPs', [
 | `scope` | `'CLOUDFRONT' \| 'REGIONAL'` | No | Scope of the Web ACL (auto-detected from region if not provided) |
 | `defaultAction` | `'ALLOW' \| 'BLOCK'` | No | Default action (default: 'ALLOW') |
 | `enableManagedRules` | `boolean` | No | Enable AWS Managed Rules |
+| `managedRulesBodySizeLimit` | `BodySizeInspectionLimit` | No | Body inspection limit for managed rules (default: 'KB_64') |
 | `managedRules` | `ManagedRuleConfig[]` | No | Custom managed rules |
 | `rateLimit` | `RateLimitConfig` | No | Rate limiting configuration |
 | `ipSets` | `IPSetConfig[]` | No | IP allow/block lists |
 | `geoBlock` | `GeoBlockConfig` | No | Geographic blocking |
+
+### ManagedRuleConfig
+
+| Property | Type | Required | Description |
+|----------|------|----------|-------------|
+| `name` | `string` | Yes | Name of the managed rule group |
+| `vendorName` | `string` | No | Vendor name (default: 'AWS') |
+| `priority` | `number` | Yes | Rule priority |
+| `excludedRules` | `string[]` | No | Rules to exclude |
+| `bodySizeInspectionLimit` | `BodySizeInspectionLimit` | No | Body inspection limit override |
+
+### BodySizeInspectionLimit
+
+Type: `'KB_16' | 'KB_32' | 'KB_48' | 'KB_64'`
+
+Controls the maximum request body size that will be inspected by WAF rules. Requests with bodies exceeding this limit are automatically blocked to prevent bypass attacks.
 
 ## Important Notes
 

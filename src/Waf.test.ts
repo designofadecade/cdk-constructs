@@ -155,6 +155,31 @@ describe('Waf', () => {
         });
     });
 
+    it('creates WAF with managed rules and oversize handling configured', () => {
+        const app = new App();
+        const stack = new Stack(app, 'TestStack', { env: { region: 'us-east-1' } });
+
+        new Waf(stack, 'TestWAF', {
+            scope: 'CLOUDFRONT',
+            enableManagedRules: true,
+            managedRulesBodySizeLimit: Waf.BODY_SIZE_64KB,
+            stack: { id: 'test', tags: [] },
+        });
+
+        const template = Template.fromStack(stack);
+        // Verify Web ACL has association config with 64KB body size inspection limit
+        template.hasResourceProperties('AWS::WAFv2::WebACL', {
+            Scope: 'CLOUDFRONT',
+            AssociationConfig: {
+                RequestBody: {
+                    CLOUDFRONT: {
+                        DefaultSizeInspectionLimit: 'KB_64',
+                    },
+                },
+            },
+        });
+    });
+
     it('has correct default action', () => {
         const app = new App();
         const stack = new Stack(app, 'TestStack', { env: { region: 'us-east-1' } });

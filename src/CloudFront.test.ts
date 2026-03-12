@@ -157,6 +157,36 @@ describe('CloudFront', () => {
         });
     });
 
+    it('enables modern (web) log format when configured', () => {
+        const app = new App();
+        const stack = new Stack(app, 'TestStack');
+        const bucket = new Bucket(stack, 'TestBucket');
+        const logBucket = new Bucket(stack, 'LogBucket');
+
+        new CloudFront(stack, 'TestDistribution', {
+            defaultBehavior: {
+                origin: CloudFront.S3BucketOrigin('origin', bucket),
+            },
+            logging: {
+                bucket: logBucket,
+                prefix: 'cloudfront-logs/',
+                logFormat: CloudFront.LOG_FORMAT_WEB,
+            },
+            stack: { id: 'test', tags: [] },
+        });
+
+        const template = Template.fromStack(stack);
+        template.hasResourceProperties('AWS::CloudFront::Distribution', {
+            DistributionConfig: {
+                Logging: {
+                    Bucket: Match.anyValue(),
+                    Prefix: 'cloudfront-logs/',
+                    LogFormat: 'web',
+                },
+            },
+        });
+    });
+
     it('disables logging when not configured', () => {
         const app = new App();
         const stack = new Stack(app, 'TestStack');

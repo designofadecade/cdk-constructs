@@ -10,9 +10,9 @@ export { Vpc } from './Vpc.js';
 export type { VpcProps, VpcEndpointType } from './Vpc.js';
 
 export { Waf } from './Waf.js';
-export type { WafProps, ManagedRuleConfig, RateLimitConfig, IPSetConfig, GeoBlockConfig } from './Waf.js';
+export type { WafProps, ManagedRuleConfig, RateLimitConfig, IPSetConfig, GeoBlockConfig, BodySizeInspectionLimit } from './Waf.js';
 
-export { CloudFront } from './CloudFront.js';
+export { CloudFront, CloudFrontLogFormat } from './CloudFront.js';
 export type {
     CloudFrontProps,
     DomainConfig,
@@ -23,6 +23,7 @@ export type {
     CspConfig,
     ResponseHeaderPolicyOptions,
     S3BucketOriginOptions,
+    LoggingConfig,
 } from './CloudFront.js';
 
 export { EventBridge } from './EventBridge.js';

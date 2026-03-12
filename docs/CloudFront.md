@@ -57,6 +57,37 @@ const distribution = new CloudFront(this, 'Distribution', {
 });
 ```
 
+### Modern (Web) Log Format
+
+CloudFront supports a modern JSON-based log format that provides additional fields and better parsing capabilities. Use `CloudFront.LOG_FORMAT_WEB` to enable the new Amazon S3 (Modern) log format.
+
+```typescript
+import { CloudFront } from '@designofadecade/cdk-constructs';
+
+const distribution = new CloudFront(this, 'Distribution', {
+  name: 'my-distribution',
+  defaultBehavior: {
+    origin: CloudFront.S3BucketOrigin('origin', myBucket),
+  },
+  logging: {
+    bucket: logBucket.bucket,
+    prefix: 'cloudfront/',
+    logFormat: CloudFront.LOG_FORMAT_WEB,  // Modern JSON format
+  },
+  stack: { id: 'my-app', tags: [] },
+});
+```
+
+**Benefits of the Web (Modern) format:**
+- JSON-based for easier parsing and analysis
+- Additional fields including HTTP version, TLS details, and more
+- Better integration with log analysis tools
+- Improved query performance in Amazon Athena
+
+**Available log formats:**
+- `CloudFront.LOG_FORMAT_STANDARD` - Legacy tab-delimited format (default)
+- `CloudFront.LOG_FORMAT_WEB` - Modern JSON format
+
 ### Logging Configuration
 
 | Property | Type | Default | Description |
@@ -64,8 +95,9 @@ const distribution = new CloudFront(this, 'Distribution', {
 | `bucket` | `IBucket` | Required | S3 bucket for storing logs |
 | `prefix` | `string` | `''` | Prefix for log file names (e.g., 'cloudfront/') |
 | `includeCookies` | `boolean` | `false` | Whether to include cookies in access logs |
+| `logFormat` | `CloudFrontLogFormat` | `LOG_FORMAT_STANDARD` | Log format: STANDARD (legacy) or WEB (modern JSON) |
 
-### Log Format
+### Log Fields
 
 CloudFront access logs include:
 - Request date/time
@@ -75,10 +107,18 @@ CloudFront access logs include:
 - User agent
 - Referrer
 - Cookies (if `includeCookies: true`)
+- **Additional fields in Web (Modern) format:**
+  - HTTP protocol version (HTTP/1.1, HTTP/2, HTTP/3)
+  - TLS version and cipher
+  - Time to first byte (TTFB)
+  - SSL/TLS protocol details
+  - Content type
+  - And many more...
 
 ### Best Practices for Logging
 
-1. **Separate log bucket** - Use a dedicated bucket for logs, not your origin bucket
+1. **Use modern log format** - Consider using `LOG_FORMAT_WEB` for new projects
+2. **Separate log bucket** - Use a dedicated bucket for logs, not your origin bucket
 2. **Enable S3 lifecycle policies** - Automatically archive or delete old logs to save costs
 3. **Analyze logs** - Use Amazon Athena or CloudWatch Logs Insights for analysis
 4. **Secure the log bucket** - Restrict access to authorized personnel only

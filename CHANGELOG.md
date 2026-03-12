@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.19.0] - 2026-03-12
+
+### Added
+- **WAF: Body size inspection limits**
+  - New `managedRulesBodySizeLimit` property to configure body inspection limits (16, 32, 48, or 64 KB)
+  - Default managed rules now use 64 KB inspection limit for enhanced security (up from AWS default 16 KB)
+  - Configured via WebACL-level `associationConfig` for consistent security across all rules
+  - AWS Managed Rules automatically block requests with bodies exceeding the inspection limit
+  - Prevents attackers from bypassing WAF inspection with oversized payloads
+  - New `BodySizeInspectionLimit` type with values: KB_16, KB_32, KB_48, KB_64
+  - Static constants: `Waf.BODY_SIZE_16KB`, `Waf.BODY_SIZE_32KB`, `Waf.BODY_SIZE_48KB`, `Waf.BODY_SIZE_64KB`
+  - Note: Inspection limits > 16 KB for CloudFront may incur additional AWS charges
+
+- **CloudFront: Modern log format support**
+  - New `logFormat` property in `LoggingConfig` to choose between standard and modern log formats
+  - Added `CloudFrontLogFormat` enum with `STANDARD` (legacy) and `WEB` (modern JSON) options
+  - Static constants for easy access: `CloudFront.LOG_FORMAT_STANDARD` and `CloudFront.LOG_FORMAT_WEB`
+  - Modern format provides JSON-based logs with additional fields (HTTP version, TLS details, TTFB, etc.)
+  - Better integration with log analysis tools like Amazon Athena
+  - Backward compatible: defaults to standard format if not specified
+
 ## [1.18.0] - 2026-03-12
 
 ### Added

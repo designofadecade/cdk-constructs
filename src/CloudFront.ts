@@ -25,6 +25,7 @@ import {
     type IKeyGroup,
     type FunctionAssociation,
     type ErrorResponse,
+    CfnDistribution,
 } from 'aws-cdk-lib/aws-cloudfront';
 import type { ICertificate } from 'aws-cdk-lib/aws-certificatemanager';
 import { HttpOrigin, S3BucketOrigin as S3Origin, FunctionUrlOrigin } from 'aws-cdk-lib/aws-cloudfront-origins';
@@ -34,6 +35,22 @@ import { ServicePrincipal } from 'aws-cdk-lib/aws-iam';
 import type { IBucket } from 'aws-cdk-lib/aws-s3';
 import type { Function as LambdaFunction } from './Function.js';
 import type { Waf } from './Waf.js';
+
+/**
+ * Log format for CloudFront access logs
+ */
+export enum CloudFrontLogFormat {
+    /**
+     * Standard (legacy) log format - tab-delimited text format
+     */
+    STANDARD = 'standard',
+
+    /**
+     * Web (modern) log format - JSON-based format with additional fields
+     * This is the new Amazon S3 (Modern) log format
+     */
+    WEB = 'web',
+}
 
 /**
  * Domain configuration for CloudFront distribution
@@ -187,6 +204,13 @@ export interface LoggingConfig {
      * @default false
      */
     readonly includeCookies?: boolean;
+
+    /**
+     * The log format for CloudFront access logs
+     * Use CloudFrontLogFormat.WEB for the modern S3 (JSON) format, or CloudFrontLogFormat.STANDARD for the legacy format
+     * @default CloudFrontLogFormat.STANDARD - legacy format for backward compatibility
+     */
+    readonly logFormat?: CloudFrontLogFormat;
 }
 
 /**
@@ -364,6 +388,12 @@ export class CloudFront extends Construct {
             errorResponses: props.errorResponses ? [...props.errorResponses] : [],
         });
 
+        // Set log format using CFN escape hatch if specified
+        if (props.logging?.logFormat) {
+            const cfnDistribution = this.#distribution.node.defaultChild as CfnDistribution;
+            cfnDistribution.addPropertyOverride('DistributionConfig.Logging.LogFormat', props.logging.logFormat);
+        }
+
         if (props.domain?.dns) {
             props.domain.dns.records.forEach((recordName) => {
                 new ARecord(this, `CloudFrontAliasRecord${recordName}`, {
@@ -425,6 +455,18 @@ export class CloudFront extends Construct {
     get responseHeadersPolicy(): IResponseHeadersPolicy | undefined {
         return this.#responseHeadersPolicy;
     }
+
+    /**
+     * Standard (legacy) log format for CloudFront access logs
+     * This is the default format used by CloudFront
+     */
+    static readonly LOG_FORMAT_STANDARD = CloudFrontLogFormat.STANDARD;
+
+    /**
+     * Web (modern) log format for CloudFront access logs
+     * Uses the new Amazon S3 (Modern) JSON-based format with additional fields
+     */
+    static readonly LOG_FORMAT_WEB = CloudFrontLogFormat.WEB;
 
     /**
      * Adds a behavior to the distribution with a custom origin
