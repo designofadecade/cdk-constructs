@@ -425,10 +425,11 @@ export class Vpc extends Construct {
         const vpcCidr = this.#vpc.vpcCidrBlock;
         const defaultNaclId = Fn.getAtt((this.#vpc.node.defaultChild as CfnVPC).logicalId, 'DefaultNetworkAcl').toString();
 
-        // Inbound: Deny all traffic from internet (evaluated before default rule 100)
-        new CfnNetworkAclEntry(this, 'DefaultNaclDenyInboundInternet', {
+        // Inbound: Override AWS default Rule 100 (change from Allow All to Deny All)
+        // This replaces the default permissive rule with an explicit DENY
+        new CfnNetworkAclEntry(this, 'DefaultNaclOverrideRule100Inbound', {
             networkAclId: defaultNaclId,
-            ruleNumber: 50,
+            ruleNumber: 100,
             protocol: -1, // All protocols
             ruleAction: 'deny',
             egress: false,
@@ -478,10 +479,12 @@ export class Vpc extends Construct {
             },
         });
 
-        // Outbound: Allow all traffic (for outbound connections to external APIs)
-        new CfnNetworkAclEntry(this, 'DefaultNaclOutboundAll', {
+        // Outbound: Override AWS default Rule 100 (change from Allow All to explicitly Allow All)
+        // We keep this as allow since we want outbound traffic for external API calls
+        // but make it explicit that we're managing this rule
+        new CfnNetworkAclEntry(this, 'DefaultNaclOverrideRule100Outbound', {
             networkAclId: defaultNaclId,
-            ruleNumber: 90,
+            ruleNumber: 100,
             protocol: -1, // All protocols
             ruleAction: 'allow',
             egress: true,
