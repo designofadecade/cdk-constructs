@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.17.0] - 2026-03-12
+
+### Changed
+- **BREAKING: Vpc `restrictDefaultNacl` now uses replacement strategy instead of override**
+  - Creates 3 new custom NACLs (public, private-egress, isolated) instead of modifying default NACL
+  - Associates custom NACLs with all subnets, automatically detaching the default NACL
+  - Default NACL remains with 0 subnet associations (no security risk, ignored by scanners)
+  - Each new NACL starts with implicit deny-all for better security posture
+  - Eliminates conflicts with AWS default Rule 100
+  - Cleaner implementation using high-level NetworkAcl constructs
+  - **Migration**: Existing stacks will need to recreate NACL associations (may cause brief disruption)
+  
+### Fixed
+- **Resolved "AlreadyExists" error when deploying with `restrictDefaultNacl`**
+  - Previous implementation tried to override Rule 100, causing conflicts
+  - New replacement strategy avoids this entirely
+  - Security scanners no longer flag Rule 100 since default NACL is detached
+
+### Security
+- **Enhanced NACL security with explicit deny-all defaults**
+  - New custom NACLs use implicit deny-all (only explicitly allowed traffic passes)
+  - More auditable - separate custom NACLs clearly visible in AWS console
+  - Better defense-in-depth with subnet-specific security rules
+
 ## [1.16.0] - 2026-03-11
 
 ### Added

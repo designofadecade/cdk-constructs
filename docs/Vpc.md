@@ -64,8 +64,8 @@ const vpc = new Vpc(this, 'MyVpc', {
 | `endpoints` | `VpcEndpointType[]` | - | VPC endpoints: 'sqs', 'secrets-manager', 's3' |
 | `restrictPrivateSubnetNacls` | `boolean` | **false** | Enable restrictive NACLs (set `true` for new VPCs) |
 | `restrictPublicSubnetNacls` | `boolean` | **false** | Block internet access to public subnets (use when everything is behind API Gateway) |
-| `restrictDefaultNacl` | `boolean` | **false** | Block ALL incoming internet traffic. Perfect for API Gateway + Lambda architecture. Allows Lambda to call external APIs. |
-| `defaultNaclAllowedPorts` | `number[]` | - | Open specific ports from internet (e.g., [80, 443] for ALB). Only use with restrictDefaultNacl. NOT needed for API Gateway + Lambda. |
+| `restrictDefaultNacl` | `boolean` | **false** | Replace the default NACL with custom secure NACLs for all subnets. Perfect for API Gateway + Lambda. Allows Lambda to call external APIs while blocking incoming internet access. |
+| `defaultNaclAllowedPorts` | `number[]` | - | Open specific ports from internet on public subnets (e.g., [80, 443] for ALB). Only use with restrictDefaultNacl if you need public services. NOT needed for API Gateway + Lambda. |
 | `allowedPorts` | `number[]` | - | Specific TCP ports to allow for restrictPrivateSubnetNacls (e.g., [80, 443]). If not specified, all ports from VPC CIDR are allowed |
 | `stack` | `object` | Required | Stack reference with id and tags |
 
@@ -184,6 +184,16 @@ const vpc = new Vpc(this, 'FullyPrivateVpc', {
 
 AWS automatically creates a **default Network ACL** for every VPC that allows all traffic (0.0.0.0/0). Any subnet not explicitly associated with a custom NACL will use this permissive default.
 
+#### The Replacement Strategy
+
+Instead of trying to modify the default NACL (which causes conflicts), `restrictDefaultNacl` creates **new custom NACLs** for all subnet types and associates them with your subnets. This automatically **detaches the default NACL**, leaving it with 0 subnet associations (no security risk).
+
+**Benefits:**
+- ✅ **No conflicts** - Each new NACL starts with implicit deny-all  
+- ✅ **Default NACL remains** - With 0 subnets (security scanners ignore it)
+- ✅ **Explicit control** - You define exactly what traffic is allowed
+- ✅ **Auditable** - Clear custom NACLs visible in AWS console
+
 #### For API Gateway + Lambda (Everything in Private Subnets)
 
 When your architecture uses API Gateway with Lambda functions in private subnets:
@@ -200,6 +210,8 @@ const vpc = new Vpc(this, 'ApiGatewayVpc', {
 ```
 
 **What this does:**
+- ✅ **Creates 3 custom NACLs** - One each for public, private-egress, and isolated subnets
+- ✅ **Detaches default NACL** - Automatically happens when custom NACLs are associated
 - ✅ **Blocks ALL incoming traffic** from internet (0.0.0.0/0) - no one can connect in
 - ✅ **Allows all VPC internal traffic** - Lambda ↔ RDS, Lambda ↔ Lambda works fine
 - ✅ **Allows Lambda to call external APIs** - Stripe, SendGrid, etc. work perfectly
@@ -225,16 +237,22 @@ Outbound:
   - All traffic → ALLOW (Lambda can call any external API)
 ```
 
+**What happens to the default NACL?**
+- It remains in your AWS account (AWS doesn't allow deletion of default NACLs)
+- It shows "Associated with **0 Subnets**" in the console
+- Security scanners ignore it since it's not attached to any traffic
+- No security risk - all your subnets use the custom NACLs instead
+
 #### If You Need Public Services (Load Balancers)
 
-Only use `defaultNaclAllowedPorts` if you have **public-facing** services like load balancers:
+Only use `defaultNaclAllowedPorts` if you have **public-facing** services like load balancers. This opens specific ports on the **public subnet custom NACL**:
 
 ```typescript
 const vpc = new Vpc(this, 'WebVpc', {
   name: 'web-vpc',
   maxAzs: 2,
-  restrictDefaultNacl: true, // ✅ Lock down the default NACL
-  defaultNaclAllowedPorts: [80, 443], // ⚠️ Opens ports from internet (for ALB)
+  restrictDefaultNacl: true, // ✅ Create custom NACLs for all subnets
+  defaultNaclAllowedPorts: [80, 443], // ⚠️ Opens ports from internet (on public NACL)
   stack: { id: 'my-app', tags: [] },
 });
 ```
