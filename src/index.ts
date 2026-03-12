@@ -12,7 +12,7 @@ export type { VpcProps, VpcEndpointType } from './Vpc.js';
 export { Waf } from './Waf.js';
 export type { WafProps, ManagedRuleConfig, RateLimitConfig, IPSetConfig, GeoBlockConfig, BodySizeInspectionLimit } from './Waf.js';
 
-export { CloudFront, CloudFrontLogFormat } from './CloudFront.js';
+export { CloudFront } from './CloudFront.js';
 export type {
     CloudFrontProps,
     DomainConfig,

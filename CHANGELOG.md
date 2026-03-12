@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.19.1] - 2026-03-12
+
+### Removed
+- **CloudFront: Modern log format support** (temporarily removed)
+  - Removed `logFormat` property from `LoggingConfig` - not yet supported in CloudFormation
+  - Removed `CloudFrontLogFormat` enum
+  - Removed static constants `CloudFront.LOG_FORMAT_STANDARD` and `CloudFront.LOG_FORMAT_WEB`
+  - Feature will be re-added when AWS CloudFormation adds support for this property
+  - **Action Required**: If you upgraded to 1.19.0 and used `logFormat`, remove it from your code
+
 ## [1.19.0] - 2026-03-12
 
 ### Added
@@ -19,14 +29,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - New `BodySizeInspectionLimit` type with values: KB_16, KB_32, KB_48, KB_64
   - Static constants: `Waf.BODY_SIZE_16KB`, `Waf.BODY_SIZE_32KB`, `Waf.BODY_SIZE_48KB`, `Waf.BODY_SIZE_64KB`
   - Note: Inspection limits > 16 KB for CloudFront may incur additional AWS charges
-
-- **CloudFront: Modern log format support**
-  - New `logFormat` property in `LoggingConfig` to choose between standard and modern log formats
-  - Added `CloudFrontLogFormat` enum with `STANDARD` (legacy) and `WEB` (modern JSON) options
-  - Static constants for easy access: `CloudFront.LOG_FORMAT_STANDARD` and `CloudFront.LOG_FORMAT_WEB`
-  - Modern format provides JSON-based logs with additional fields (HTTP version, TLS details, TTFB, etc.)
-  - Better integration with log analysis tools like Amazon Athena
-  - Backward compatible: defaults to standard format if not specified
 
 ## [1.18.0] - 2026-03-12
 
