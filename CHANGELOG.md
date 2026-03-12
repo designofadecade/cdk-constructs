@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.17.1] - 2026-03-12
+
+### Fixed
+- **Vpc `restrictDefaultNacl` now allows UDP ephemeral ports for DNS resolution**
+  - Added UDP ephemeral port rules (1024-65535) alongside existing TCP rules
+  - Fixes Lambda timeout issues when accessing AWS services (Secrets Manager, DynamoDB, etc.) from private subnets with NAT Gateway
+  - DNS queries require UDP protocol for response traffic in stateless NACLs
+  - Applies to both public and private-egress custom NACLs
+
 ## [1.17.0] - 2026-03-12
 
 ### Changed

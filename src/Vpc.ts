@@ -296,12 +296,21 @@ export class Vpc extends Construct {
             });
         }
 
-        // Allow ephemeral ports from internet for return traffic (Lambda calling external APIs)
+        // Allow ephemeral TCP ports from internet for return traffic (Lambda calling external APIs)
         // This is safe because connections must be initiated from inside the VPC
-        privateEgressNacl.addEntry('AllowEphemeralPortsFromInternet', {
+        privateEgressNacl.addEntry('AllowEphemeralTcpPortsFromInternet', {
             cidr: AclCidr.anyIpv4(),
             ruleNumber: 200,
             traffic: AclTraffic.tcpPortRange(1024, 65535),
+            direction: TrafficDirection.INGRESS,
+            ruleAction: Action.ALLOW,
+        });
+
+        // Allow ephemeral UDP ports from internet for DNS responses and other UDP return traffic
+        privateEgressNacl.addEntry('AllowEphemeralUdpPortsFromInternet', {
+            cidr: AclCidr.anyIpv4(),
+            ruleNumber: 201,
+            traffic: AclTraffic.udpPortRange(1024, 65535),
             direction: TrafficDirection.INGRESS,
             ruleAction: Action.ALLOW,
         });
@@ -444,11 +453,20 @@ export class Vpc extends Construct {
             });
         }
 
-        // Inbound: Allow ephemeral ports from internet for return traffic
-        publicNacl.addEntry('AllowEphemeralFromInternet', {
+        // Inbound: Allow ephemeral TCP ports from internet for return traffic
+        publicNacl.addEntry('AllowEphemeralTcpFromInternet', {
             cidr: AclCidr.anyIpv4(),
             ruleNumber: 200,
             traffic: AclTraffic.tcpPortRange(1024, 65535),
+            direction: TrafficDirection.INGRESS,
+            ruleAction: Action.ALLOW,
+        });
+
+        // Inbound: Allow ephemeral UDP ports from internet for DNS responses and other UDP return traffic
+        publicNacl.addEntry('AllowEphemeralUdpFromInternet', {
+            cidr: AclCidr.anyIpv4(),
+            ruleNumber: 201,
+            traffic: AclTraffic.udpPortRange(1024, 65535),
             direction: TrafficDirection.INGRESS,
             ruleAction: Action.ALLOW,
         });
@@ -493,11 +511,20 @@ export class Vpc extends Construct {
             ruleAction: Action.ALLOW,
         });
 
-        // Inbound: Allow ephemeral ports from internet for return traffic
-        privateEgressNacl.addEntry('AllowEphemeralFromInternet', {
+        // Inbound: Allow ephemeral TCP ports from internet for return traffic
+        privateEgressNacl.addEntry('AllowEphemeralTcpFromInternet', {
             cidr: AclCidr.anyIpv4(),
             ruleNumber: 200,
             traffic: AclTraffic.tcpPortRange(1024, 65535),
+            direction: TrafficDirection.INGRESS,
+            ruleAction: Action.ALLOW,
+        });
+
+        // Inbound: Allow ephemeral UDP ports from internet for DNS responses and other UDP return traffic
+        privateEgressNacl.addEntry('AllowEphemeralUdpFromInternet', {
+            cidr: AclCidr.anyIpv4(),
+            ruleNumber: 201,
+            traffic: AclTraffic.udpPortRange(1024, 65535),
             direction: TrafficDirection.INGRESS,
             ruleAction: Action.ALLOW,
         });
