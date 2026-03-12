@@ -5,11 +5,13 @@ The Monitoring construct provides a complete monitoring solution with CloudWatch
 ## Features
 
 - 📊 **CloudWatch Log Groups**: Create log groups with configurable retention and removal policies
-- � **Real-Time Error Monitoring**: Instant notifications for error logs via subscription filters
+- ⚡ **Real-Time Error Monitoring**: Instant notifications for error logs via subscription filters
 - 🔍 **Metric Filters**: Extract metrics from log patterns (ERROR, Exception, etc.)
 - 🚨 **CloudWatch Alarms**: Create alarms that trigger on metric thresholds
 - 📢 **SNS Topics**: Set up notification topics for alarm delivery
 - 💬 **Multi-Platform Notifications**: Send formatted messages to Slack, Teams, or Google Chat
+- 🛡️ **GuardDuty Integration**: Monitor AWS GuardDuty security findings with configurable severity levels
+- 🔑 **IAM Access Analyzer**: Detect unintended resource access with Access Analyzer findings
 - 🎯 **Instance-Based API**: Create a monitoring construct and add alarms as needed
 - 🔄 **Shared Lambda Functions**: Efficient resource usage with reusable processors
 - ⚙️ **Sensible Defaults**: Pre-configured with production-ready settings
@@ -382,6 +384,9 @@ Main configuration for the Monitoring construct:
 | `stack` | `Stack` | undefined | Optional stack reference |
 | `topic` | `SnsTopicConfig` | undefined | SNS topic configuration |
 | `notifications` | `NotificationHandler[]` | `[]` | Array of notification handlers |
+| `logErrorFunctionName` | `string` | undefined | Optional name for shared log error processing function |
+| `guardDuty` | `GuardDutyConfig` | undefined | GuardDuty monitoring configuration |
+| `accessAnalyzer` | `AccessAnalyzerConfig` | undefined | IAM Access Analyzer monitoring configuration |
 
 ### NotificationHandler
 
@@ -442,6 +447,44 @@ Used with `monitoring.addLogAlarm()`:
 | `metricNamespace` | `string` | `'CustomMetrics'` | Namespace for the metric |
 | `alarmName` | `string` | auto-generated | Name of the alarm |
 | `alarmDescription` | `string` | auto-generated | Description of the alarm |
+
+### GuardDutyConfig
+
+Configuration for AWS GuardDuty monitoring:
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `enabled` | `boolean` | required | Enable GuardDuty findings monitoring |
+| `minSeverity` | `GuardDutySeverity` | `'MEDIUM'` | Minimum severity level (LOW, MEDIUM, HIGH, CRITICAL) |
+| `ruleName` | `string` | auto-generated | EventBridge rule name |
+| `ruleDescription` | `string` | auto-generated | EventBridge rule description |
+
+**GuardDutySeverity values:**
+- `'LOW'` or `Monitoring.GUARD_DUTY_MIN_SEVERITY_LOW` - Severity 1.0-3.9
+- `'MEDIUM'` or `Monitoring.GUARD_DUTY_MIN_SEVERITY_MEDIUM` - Severity 4.0-6.9 (default)
+- `'HIGH'` or `Monitoring.GUARD_DUTY_MIN_SEVERITY_HIGH` - Severity 7.0-8.9
+- `'CRITICAL'` or `Monitoring.GUARD_DUTY_MIN_SEVERITY_CRITICAL` - Severity 9.0+
+
+### AccessAnalyzerConfig
+
+Configuration for IAM Access Analyzer monitoring:
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `enabled` | `boolean` | required | Enable Access Analyzer findings monitoring |
+| `resourceTypes` | `string[]` | undefined (all) | Filter by resource types (e.g., 'AWS::S3::Bucket') |
+| `activeOnly` | `boolean` | `true` | Only alert on ACTIVE findings |
+| `ruleName` | `string` | auto-generated | EventBridge rule name |
+| `ruleDescription` | `string` | auto-generated | EventBridge rule description |
+
+**Common resource types:**
+- `'AWS::S3::Bucket'` - S3 buckets
+- `'AWS::IAM::Role'` - IAM roles
+- `'AWS::KMS::Key'` - KMS keys
+- `'AWS::Lambda::Function'` - Lambda functions
+- `'AWS::Lambda::LayerVersion'` - Lambda layers
+- `'AWS::SQS::Queue'` - SQS queues
+- `'AWS::SecretsManager::Secret'` - Secrets Manager secrets
 
 ## Common Retention Periods
 
@@ -640,6 +683,297 @@ monitoring.addLogAlarm('ErrorMonitoring', {
 });
 ```
 
+## Security Monitoring
+
+### GuardDuty Findings
+
+Monitor AWS GuardDuty security findings and get notifications when threats are detected. GuardDuty findings are sent to the same SNS topic as your CloudWatch alarms.
+
+**Prerequisites**: GuardDuty must be enabled in your AWS account.
+
+#### Basic GuardDuty Monitoring
+
+```typescript
+const monitoring = new Monitoring(this, 'SecurityMonitoring', {
+  topic: {
+    topicName: 'security-alerts',
+    displayName: 'Security Alerts',
+  },
+  notifications: [
+    Monitoring.slackNotifier({
+      slackWebhookUrl: process.env.SLACK_WEBHOOK_URL!,
+      slackChannel: '#security-alerts',
+      messagePrefix: '[SECURITY]',
+    }),
+  ],
+  // Enable GuardDuty monitoring
+  guardDuty: {
+    enabled: true,
+  },
+});
+```
+
+This will send notifications for all GuardDuty findings with severity >= MEDIUM (4.0).
+
+#### Configure Minimum Severity
+
+Filter findings by minimum severity level:
+
+```typescript
+guardDuty: {
+  enabled: true,
+  minSeverity: 'HIGH', // Only alert on HIGH (7.0-8.9) and CRITICAL (9.0+) findings
+}
+```
+
+**Severity levels:**
+- `'LOW'` - Severity 1.0-3.9 (informational findings)
+- `'MEDIUM'` - Severity 4.0-6.9 (default, moderate threats)
+- `'HIGH'` - Severity 7.0-8.9 (serious threats)
+- `'CRITICAL'` - Severity 9.0+ (critical threats requiring immediate action)
+
+You can also use the static constants:
+
+```typescript
+import { Monitoring } from '@designofadecade/cdk-constructs';
+
+guardDuty: {
+  enabled: true,
+  minSeverity: Monitoring.GUARD_DUTY_MIN_SEVERITY_CRITICAL, // Only critical findings
+}
+```
+
+#### Custom Rule Configuration
+
+Customize the EventBridge rule name and description:
+
+```typescript
+guardDuty: {
+  enabled: true,
+  minSeverity: 'HIGH',
+  ruleName: 'production-guardduty-alerts',
+  ruleDescription: 'High and critical GuardDuty findings for production',
+}
+```
+
+#### Complete Security Monitoring Example
+
+```typescript
+const monitoring = new Monitoring(this, 'SecurityMonitoring', {
+  topic: {
+    topicName: 'security-alerts',
+    displayName: 'Security Alerts',
+  },
+  notifications: [
+    // Send to Slack security channel
+    Monitoring.slackNotifier({
+      slackWebhookUrl: process.env.SLACK_WEBHOOK_URL!,
+      slackChannel: '#security-alerts',
+      messagePrefix: '🔐 [SECURITY]',
+    }),
+    // Also send to security team's Teams channel
+    Monitoring.teamsNotifier({
+      webhookUrl: process.env.TEAMS_SECURITY_WEBHOOK_URL!,
+      messagePrefix: '🔐 [SECURITY]',
+    }),
+  ],
+  guardDuty: {
+    enabled: true,
+    minSeverity: 'HIGH', // Only high and critical findings
+    ruleName: 'security-guardduty-high-severity',
+    ruleDescription: 'GuardDuty high and critical severity findings',
+  },
+});
+
+// Also monitor application logs for security events
+monitoring.addLogAlarm('UnauthorizedAccess', {
+  logGroup: apiLogGroup,
+  filterPattern: 'Unauthorized',
+  threshold: 5,
+  alarmName: 'UnauthorizedAccessDetected',
+});
+```
+
+#### Access GuardDuty Rule
+
+The EventBridge rule is accessible via the `guardDutyRule` property:
+
+```typescript
+// Access the GuardDuty rule after creation
+if (monitoring.guardDutyRule) {
+  console.log('GuardDuty Rule ARN:', monitoring.guardDutyRule.ruleArn);
+}
+```
+
+### IAM Access Analyzer Findings
+
+Monitor IAM Access Analyzer findings for unintended resource access. Access Analyzer findings are sent to the same SNS topic as your CloudWatch alarms and GuardDuty findings.
+
+**Prerequisites**: IAM Access Analyzer must be enabled in your AWS account, with an analyzer created for your organization or account.
+
+#### Basic Access Analyzer Monitoring
+
+```typescript
+const monitoring = new Monitoring(this, 'SecurityMonitoring', {
+  topic: {
+    topicName: 'security-alerts',
+    displayName: 'Security Alerts',
+  },
+  notifications: [
+    Monitoring.slackNotifier({
+      slackWebhookUrl: process.env.SLACK_WEBHOOK_URL!,
+      slackChannel: '#security-alerts',
+      messagePrefix: '[IAM]',
+    }),
+  ],
+  // Enable Access Analyzer monitoring
+  accessAnalyzer: {
+    enabled: true,
+  },
+});
+```
+
+This will send notifications for all ACTIVE findings (unintended access detected).
+
+#### Filter by Resource Type
+
+Monitor specific AWS resource types:
+
+```typescript
+accessAnalyzer: {
+  enabled: true,
+  resourceTypes: [
+    'AWS::S3::Bucket',       // S3 buckets with public access
+    'AWS::IAM::Role',        // IAM roles with external access
+    'AWS::KMS::Key',         // KMS keys shared externally
+    'AWS::Lambda::Function', // Lambda functions with external permissions
+  ],
+}
+```
+
+**Common resource types:**
+- `AWS::S3::Bucket` - S3 buckets
+- `AWS::IAM::Role` - IAM roles
+- `AWS::KMS::Key` - KMS keys
+- `AWS::Lambda::Function` - Lambda functions
+- `AWS::Lambda::LayerVersion` - Lambda layers
+- `AWS::SQS::Queue` - SQS queues
+- `AWS::SecretsManager::Secret` - Secrets Manager secrets
+
+#### Include All Finding Statuses
+
+By default, only ACTIVE findings are monitored. To include ARCHIVED and RESOLVED findings:
+
+```typescript
+accessAnalyzer: {
+  enabled: true,
+  activeOnly: false, // Include all finding statuses
+}
+```
+
+#### Custom Rule Configuration
+
+Customize the EventBridge rule:
+
+```typescript
+accessAnalyzer: {
+  enabled: true,
+  resourceTypes: ['AWS::S3::Bucket', 'AWS::IAM::Role'],
+  ruleName: 'production-access-analyzer-alerts',
+  ruleDescription: 'Access Analyzer findings for S3 and IAM resources',
+}
+```
+
+#### Complete IAM Security Monitoring Example
+
+```typescript
+const monitoring = new Monitoring(this, 'IamSecurityMonitoring', {
+  topic: {
+    topicName: 'iam-security-alerts',
+    displayName: 'IAM Security Alerts',
+  },
+  notifications: [
+    Monitoring.slackNotifier({
+      slackWebhookUrl: process.env.SLACK_WEBHOOK_URL!,
+      slackChannel: '#iam-security',
+      messagePrefix: '🔑 [IAM]',
+    }),
+  ],
+  accessAnalyzer: {
+    enabled: true,
+    resourceTypes: [
+      'AWS::S3::Bucket',
+      'AWS::IAM::Role',
+      'AWS::KMS::Key',
+    ],
+    activeOnly: true, // Only alert on active findings
+    ruleName: 'iam-access-analyzer-critical',
+    ruleDescription: 'Critical IAM Access Analyzer findings',
+  },
+});
+```
+
+#### Access Analyzer Rule
+
+The EventBridge rule is accessible via the `accessAnalyzerRule` property:
+
+```typescript
+// Access the Access Analyzer rule after creation
+if (monitoring.accessAnalyzerRule) {
+  console.log('Access Analyzer Rule ARN:', monitoring.accessAnalyzerRule.ruleArn);
+}
+```
+
+### Combined Security Monitoring
+
+Monitor both GuardDuty and IAM Access Analyzer in a single monitoring construct:
+
+```typescript
+const monitoring = new Monitoring(this, 'ComprehensiveSecurityMonitoring', {
+  topic: {
+    topicName: 'all-security-alerts',
+    displayName: 'All Security Alerts',
+  },
+  notifications: [
+    Monitoring.slackNotifier({
+      slackWebhookUrl: process.env.SLACK_WEBHOOK_URL!,
+      slackChannel: '#security-ops',
+      messagePrefix: '🛡️ [SECURITY]',
+    }),
+    Monitoring.teamsNotifier({
+      webhookUrl: process.env.TEAMS_WEBHOOK_URL!,
+      messagePrefix: '🛡️ [SECURITY]',
+    }),
+  ],
+  // Monitor GuardDuty threats
+  guardDuty: {
+    enabled: true,
+    minSeverity: 'HIGH',
+  },
+  // Monitor IAM access issues
+  accessAnalyzer: {
+    enabled: true,
+    resourceTypes: [
+      'AWS::S3::Bucket',
+      'AWS::IAM::Role',
+      'AWS::Lambda::Function',
+    ],
+  },
+});
+
+// Also add application-level alarms
+monitoring.addLogAlarm('AuthenticationFailures', {
+  logGroup: authLogGroup,
+  filterPattern: 'authentication failed',
+  threshold: 10,
+  alarmName: 'HighAuthFailureRate',
+});
+
+// Access both security rules
+console.log('GuardDuty Rule:', monitoring.guardDutyRule?.ruleArn);
+console.log('Access Analyzer Rule:', monitoring.accessAnalyzerRule?.ruleArn);
+```
+
 ## Notification Message Formats
 
 ### Slack
@@ -683,6 +1017,12 @@ monitoring.notificationFunctions: IFunction[]
 
 // Array of all alarms created via addAlarm/addLogAlarm
 monitoring.alarms: Alarm[]
+
+// GuardDuty EventBridge rule (if enabled)
+monitoring.guardDutyRule?: IRule
+
+// IAM Access Analyzer EventBridge rule (if enabled)
+monitoring.accessAnalyzerRule?: IRule
 ```
 
 ## Factory Methods

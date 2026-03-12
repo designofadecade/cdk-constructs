@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { App, Stack } from 'aws-cdk-lib';
 import { Template } from 'aws-cdk-lib/assertions';
+import { ObjectOwnership } from 'aws-cdk-lib/aws-s3';
 import { S3Bucket } from './S3Bucket.js';
 
 describe('S3Bucket', () => {
@@ -99,5 +100,43 @@ describe('S3Bucket', () => {
 
         expect(s3Bucket.bucket).toBeDefined();
         expect(s3Bucket.bucketName).toBeDefined();
+    });
+
+    it('configures object ownership controls when specified', () => {
+        const app = new App();
+        const stack = new Stack(app, 'TestStack');
+
+        new S3Bucket(stack, 'TestBucket', {
+            name: 'test-bucket',
+            stack: { id: 'test', tags: [] },
+            objectOwnership: ObjectOwnership.BUCKET_OWNER_PREFERRED,
+        });
+
+        const template = Template.fromStack(stack);
+        template.hasResourceProperties('AWS::S3::Bucket', {
+            OwnershipControls: {
+                Rules: [
+                    {
+                        ObjectOwnership: 'BucketOwnerPreferred',
+                    },
+                ],
+            },
+        });
+    });
+
+    it('does not configure object ownership controls when not specified', () => {
+        const app = new App();
+        const stack = new Stack(app, 'TestStack');
+
+        new S3Bucket(stack, 'TestBucket', {
+            name: 'test-bucket',
+            stack: { id: 'test', tags: [] },
+        });
+
+        const template = Template.fromStack(stack);
+        const buckets = template.findResources('AWS::S3::Bucket');
+        const bucketProps = Object.values(buckets)[0].Properties;
+
+        expect(bucketProps.OwnershipControls).toBeUndefined();
     });
 });

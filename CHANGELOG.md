@@ -5,6 +5,37 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Monitoring: GuardDuty integration**
+  - New `guardDuty` configuration option in `MonitoringProps`
+  - Monitor AWS GuardDuty security findings with configurable severity levels
+  - Filter by severity: LOW (1.0-3.9), MEDIUM (4.0-6.9), HIGH (7.0-8.9), CRITICAL (9.0+)
+  - Static constants for severity levels: `GUARD_DUTY_MIN_SEVERITY_LOW/MEDIUM/HIGH/CRITICAL`
+  - Default minimum severity: MEDIUM (4.0)
+  - Configurable EventBridge rule name and description
+  - Findings are sent to the same SNS topic as CloudWatch alarms
+  - Access rule via `monitoring.guardDutyRule` property
+  - **Note**: GuardDuty must be enabled in your AWS account
+
+- **Monitoring: IAM Access Analyzer integration**
+  - New `accessAnalyzer` configuration option in `MonitoringProps`
+  - Monitor IAM Access Analyzer findings for unintended resource access
+  - Filter by resource types (S3 buckets, IAM roles, KMS keys, Lambda functions, etc.)
+  - Control whether to alert on ACTIVE findings only (default) or include all statuses
+  - Configurable EventBridge rule name and description
+  - Findings are sent to the same SNS topic as CloudWatch alarms
+  - Access rule via `monitoring.accessAnalyzerRule` property
+  - **Note**: IAM Access Analyzer must be enabled in your AWS account
+
+- **S3Bucket: Object ownership controls**
+  - New optional `objectOwnership` property to configure ACL behavior
+  - Static constant `S3Bucket.BUCKET_OWNER_PREFERRED` for convenient access
+  - Enables ACL support required for CloudFront logging and other AWS services
+  - Supports all ObjectOwnership values: BUCKET_OWNER_PREFERRED, OBJECT_WRITER, BUCKET_OWNER_ENFORCED
+  - Automatically configures ownership controls at bucket creation when specified
+
 ## [1.17.1] - 2026-03-12
 
 ### Fixed

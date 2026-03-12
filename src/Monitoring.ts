@@ -68,6 +68,39 @@ export interface GuardDutyConfig {
 }
 
 /**
+ * IAM Access Analyzer monitoring configuration
+ */
+export interface AccessAnalyzerConfig {
+    /**
+     * Enable IAM Access Analyzer findings monitoring
+     * Note: Access Analyzer must be enabled in your AWS account
+     */
+    readonly enabled: boolean;
+
+    /**
+     * Resource types to monitor (default: all)
+     * Examples: 'AWS::S3::Bucket', 'AWS::IAM::Role', 'AWS::KMS::Key', 'AWS::Lambda::Function'
+     */
+    readonly resourceTypes?: string[];
+
+    /**
+     * Only alert on ACTIVE findings (default: true)
+     * Set to false to also include ARCHIVED and RESOLVED findings
+     */
+    readonly activeOnly?: boolean;
+
+    /**
+     * EventBridge rule name (default: auto-generated)
+     */
+    readonly ruleName?: string;
+
+    /**
+     * EventBridge rule description
+     */
+    readonly ruleDescription?: string;
+}
+
+/**
  * Configuration options for the Monitoring construct
  */
 export interface MonitoringProps {
@@ -96,6 +129,12 @@ export interface MonitoringProps {
      * When enabled, GuardDuty findings will be sent to the same SNS topic
      */
     readonly guardDuty?: GuardDutyConfig;
+
+    /**
+     * IAM Access Analyzer monitoring configuration
+     * When enabled, Access Analyzer findings will be sent to the same SNS topic
+     */
+    readonly accessAnalyzer?: AccessAnalyzerConfig;
 }
 
 /**
@@ -222,6 +261,11 @@ export class Monitoring extends Construct {
     public readonly guardDutyRule?: IRule;
 
     /**
+     * IAM Access Analyzer EventBridge rule (if enabled)
+     */
+    public readonly accessAnalyzerRule?: IRule;
+
+    /**
      * Shared Lambda function for processing log errors
      * Created lazily on first use
      */
@@ -254,6 +298,11 @@ export class Monitoring extends Construct {
         // Setup GuardDuty monitoring if enabled
         if (props?.guardDuty?.enabled) {
             this.guardDutyRule = this.createGuardDutyRule(props.guardDuty);
+        }
+
+        // Setup Access Analyzer monitoring if enabled
+        if (props?.accessAnalyzer?.enabled) {
+            this.accessAnalyzerRule = this.createAccessAnalyzerRule(props.accessAnalyzer);
         }
     }
 
@@ -469,6 +518,43 @@ export class Monitoring extends Construct {
                         },
                     ],
                 },
+            },
+        });
+
+        // Add SNS topic as target
+        rule.addTarget(new SnsTopic(this.topic));
+
+        return rule;
+    }
+
+    /**
+     * Creates an EventBridge rule to monitor IAM Access Analyzer findings
+     */
+    private createAccessAnalyzerRule(config: AccessAnalyzerConfig): IRule {
+        const activeOnly = config.activeOnly ?? true;
+
+        // Build event pattern based on configuration
+        const detail: any = {};
+
+        // Filter by status (ACTIVE only by default)
+        if (activeOnly) {
+            detail.status = ['ACTIVE'];
+        }
+
+        // Filter by resource types if specified
+        if (config.resourceTypes && config.resourceTypes.length > 0) {
+            detail.resourceType = config.resourceTypes;
+        }
+
+        // Create EventBridge rule for Access Analyzer findings
+        // See: https://docs.aws.amazon.com/IAM/latest/UserGuide/access-analyzer-eventbridge.html
+        const rule = new Rule(this, 'AccessAnalyzerRule', {
+            ruleName: config.ruleName,
+            description: config.ruleDescription ?? 'IAM Access Analyzer findings for unintended resource access',
+            eventPattern: {
+                source: ['aws.access-analyzer'],
+                detailType: ['Access Analyzer Finding'],
+                detail: Object.keys(detail).length > 0 ? detail : undefined,
             },
         });
 

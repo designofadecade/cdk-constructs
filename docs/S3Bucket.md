@@ -22,6 +22,28 @@ const bucket = new S3Bucket(this, 'AssetBucket', {
 });
 ```
 
+## Object Ownership (ACL Support)
+
+Configure object ownership controls to enable ACLs, which are required for certain AWS services like CloudFront logging:
+
+```typescript
+import { S3Bucket } from '@designofadecade/cdk-constructs';
+
+// Enable ACLs for CloudFront logging
+const logsBucket = new S3Bucket(this, 'LogsBucket', {
+  name: 'my-cloudfront-logs',
+  stack: { id: 'my-app', tags: [] },
+  objectOwnership: S3Bucket.BUCKET_OWNER_PREFERRED,
+});
+```
+
+**Available Options:**
+- `S3Bucket.BUCKET_OWNER_PREFERRED` - Objects uploaded with `bucket-owner-full-control` ACL are owned by bucket owner (required for CloudFront logging)
+- `ObjectOwnership.OBJECT_WRITER` - The uploading account owns the object (default S3 behavior)
+- `ObjectOwnership.BUCKET_OWNER_ENFORCED` - ACLs are disabled, bucket owner owns all objects
+
+**Note:** By default (when `objectOwnership` is not specified), no ownership controls are set and S3 uses default behavior.
+
 ## Properties
 
 ### S3BucketProps
@@ -30,6 +52,7 @@ const bucket = new S3Bucket(this, 'AssetBucket', {
 |----------|------|---------|-------------|
 | `name` | `string` | Required | Bucket name |
 | `stack` | `object` | Required | Stack ID and tags |
+| `objectOwnership` | `ObjectOwnership` | - | Object ownership controls for ACL configuration |
 | `versioned` | `boolean` | false | Enable versioning |
 | `lifecycleRules` | `LifecycleRule[]` | - | Lifecycle rules |
 | `cors` | `CorsRule[]` | - | CORS configuration |

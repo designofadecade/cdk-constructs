@@ -1,6 +1,6 @@
 import { Construct } from 'constructs';
 import { RemovalPolicy, Duration, Tags, CfnOutput } from 'aws-cdk-lib';
-import { Bucket, BlockPublicAccess, BucketEncryption, EventType, NotificationKeyFilter, type IBucket } from 'aws-cdk-lib/aws-s3';
+import { Bucket, BlockPublicAccess, BucketEncryption, EventType, NotificationKeyFilter, type IBucket, CfnBucket, ObjectOwnership } from 'aws-cdk-lib/aws-s3';
 import { LambdaDestination } from 'aws-cdk-lib/aws-s3-notifications';
 import { IFunction } from 'aws-cdk-lib/aws-lambda';
 import type { IGrantable } from 'aws-cdk-lib/aws-iam';
@@ -21,6 +21,28 @@ export interface S3BucketProps {
         readonly id: string;
         readonly tags: ReadonlyArray<{ readonly key: string; readonly value: string }>;
     };
+
+    /**
+     * Object ownership controls for the bucket
+     * 
+     * Use this to configure ACL behavior:
+     * - BUCKET_OWNER_PREFERRED: Objects uploaded with the bucket-owner-full-control canned ACL are owned by the bucket owner.
+     * - OBJECT_WRITER: The uploading account will own the object (default S3 behavior).
+     * - BUCKET_OWNER_ENFORCED: ACLs are disabled, and the bucket owner owns all objects.
+     * 
+     * @default - No ownership controls are set
+     * 
+     * @example
+     * ```typescript
+     * // Enable ACLs for CloudFront logging
+     * const logsBucket = new S3Bucket(this, 'LogsBucket', {
+     *   name: 'my-logs',
+     *   stack: { id: 'my-app', tags: [] },
+     *   objectOwnership: S3Bucket.BUCKET_OWNER_PREFERRED,
+     * });
+     * ```
+     */
+    readonly objectOwnership?: ObjectOwnership;
 }
 
 /**
@@ -48,6 +70,11 @@ export interface S3BucketProps {
  * ```
  */
 export class S3Bucket extends Construct {
+    /**
+     * Default object ownership setting for buckets that require ACL support (e.g., CloudFront logging)
+     */
+    static readonly BUCKET_OWNER_PREFERRED = ObjectOwnership.BUCKET_OWNER_PREFERRED;
+
     #bucket: Bucket;
 
     constructor(scope: Construct, id: string, props: S3BucketProps) {
@@ -60,6 +87,16 @@ export class S3Bucket extends Construct {
             publicReadAccess: false,
             encryption: BucketEncryption.S3_MANAGED,
         });
+
+        // Configure object ownership controls if specified
+        if (props.objectOwnership) {
+            const cfnBucket = this.#bucket.node.defaultChild as CfnBucket;
+            cfnBucket.ownershipControls = {
+                rules: [{
+                    objectOwnership: props.objectOwnership
+                }]
+            };
+        }
 
         props.stack.tags.forEach(({ key, value }) => {
             Tags.of(this.#bucket).add(key, value);
