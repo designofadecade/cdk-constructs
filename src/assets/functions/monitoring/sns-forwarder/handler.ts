@@ -1,23 +1,23 @@
 import type { SNSEvent } from 'aws-lambda';
 import { SNS, PublishCommand } from '@aws-sdk/client-sns';
 
-const targetTopicArn = process.env.TARGET_TOPIC_ARN;
-const targetRegion = process.env.TARGET_REGION;
-
-if (!targetTopicArn) {
-    throw new Error('TARGET_TOPIC_ARN environment variable is required');
-}
-
-if (!targetRegion) {
-    throw new Error('TARGET_REGION environment variable is required');
-}
-
-// Create SNS client for the target region
-const snsClient = new SNS({ region: targetRegion });
-
 export const handler = async (event: SNSEvent): Promise<{ statusCode: number; body: string }> => {
     console.log('Received SNS event:', JSON.stringify(event, null, 2));
 
+    const targetTopicArn = process.env.TARGET_TOPIC_ARN;
+    const targetRegion = process.env.TARGET_REGION;
+
+    if (!targetTopicArn) {
+        throw new Error('TARGET_TOPIC_ARN environment variable is required');
+    }
+
+    if (!targetRegion) {
+        throw new Error('TARGET_REGION environment variable is required');
+    }
+
+    // Create SNS client for the target region
+    const snsClient = new SNS({ region: targetRegion });
+    
     const results: string[] = [];
 
     for (const record of event.Records) {
