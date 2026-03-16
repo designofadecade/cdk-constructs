@@ -10,6 +10,7 @@ import { Function as LambdaFunction, Runtime, Code, type IFunction } from 'aws-c
 import { PolicyStatement, Effect } from 'aws-cdk-lib/aws-iam';
 import { Rule, type IRule } from 'aws-cdk-lib/aws-events';
 import { SnsTopic } from 'aws-cdk-lib/aws-events-targets';
+import { CfnAnalyzer } from 'aws-cdk-lib/aws-accessanalyzer';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
@@ -73,9 +74,28 @@ export interface GuardDutyConfig {
 export interface AccessAnalyzerConfig {
     /**
      * Enable IAM Access Analyzer findings monitoring
-     * Note: Access Analyzer must be enabled in your AWS account
+     * When enabled, creates an Access Analyzer and EventBridge rule for findings
      */
     readonly enabled: boolean;
+
+    /**
+     * Name for the Access Analyzer (default: auto-generated from stack)
+     * Must be unique within the AWS account and region
+     */
+    readonly analyzerName?: string;
+
+    /**
+     * Type of analyzer to create (default: 'ACCOUNT')
+     * - ACCOUNT: Analyzes resources within the current account
+     * - ORGANIZATION: Analyzes resources across the organization (requires org admin permissions)
+     */
+    readonly type?: 'ACCOUNT' | 'ORGANIZATION';
+
+    /**
+     * Finding types to monitor (default: all)
+     * Examples: 'ExternalPrincipal', 'UnusedAccess'
+     */
+    readonly findingTypes?: string[];
 
     /**
      * Resource types to monitor (default: all)
@@ -264,6 +284,11 @@ export class Monitoring extends Construct {
      * IAM Access Analyzer EventBridge rule (if enabled)
      */
     public readonly accessAnalyzerRule?: IRule;
+
+    /**
+     * IAM Access Analyzer resource (if enabled)
+     */
+    public analyzer?: CfnAnalyzer;
 
     /**
      * Shared Lambda function for processing log errors
@@ -529,9 +554,23 @@ export class Monitoring extends Construct {
 
     /**
      * Creates an EventBridge rule to monitor IAM Access Analyzer findings
+     * Also creates the Access Analyzer resource if it doesn't exist
      */
     private createAccessAnalyzerRule(config: AccessAnalyzerConfig): IRule {
+        const stack = Stack.of(this);
+        const analyzerType = config.type ?? 'ACCOUNT';
         const activeOnly = config.activeOnly ?? true;
+
+        // Create the Access Analyzer
+        const analyzerName = config.analyzerName ?? `${stack.stackName}-access-analyzer`;
+        this.analyzer = new CfnAnalyzer(this, 'AccessAnalyzer', {
+            analyzerName,
+            type: analyzerType,
+            tags: [
+                { key: 'Name', value: analyzerName },
+                { key: 'ManagedBy', value: 'CDK' },
+            ],
+        });
 
         // Build event pattern based on configuration
         const detail: any = {};
@@ -539,6 +578,11 @@ export class Monitoring extends Construct {
         // Filter by status (ACTIVE only by default)
         if (activeOnly) {
             detail.status = ['ACTIVE'];
+        }
+
+        // Filter by finding types if specified
+        if (config.findingTypes && config.findingTypes.length > 0) {
+            detail.findingType = config.findingTypes;
         }
 
         // Filter by resource types if specified
@@ -557,6 +601,9 @@ export class Monitoring extends Construct {
                 detail: Object.keys(detail).length > 0 ? detail : undefined,
             },
         });
+
+        // Ensure the rule depends on the analyzer
+        rule.node.addDependency(this.analyzer);
 
         // Add SNS topic as target
         rule.addTarget(new SnsTopic(this.topic));

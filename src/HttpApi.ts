@@ -4,7 +4,7 @@ import { HttpApi as AwsHttpApi, HttpMethod, CorsHttpMethod, type IHttpRouteAutho
 import { HttpLambdaIntegration } from 'aws-cdk-lib/aws-apigatewayv2-integrations';
 import { HttpLambdaAuthorizer, HttpLambdaResponseType } from 'aws-cdk-lib/aws-apigatewayv2-authorizers';
 import type { IFunction } from 'aws-cdk-lib/aws-lambda';
-import { LogGroup, RetentionDays } from 'aws-cdk-lib/aws-logs';
+import { LogGroup, RetentionDays, type ILogGroup } from 'aws-cdk-lib/aws-logs';
 import type { IBucket } from 'aws-cdk-lib/aws-s3';
 
 /**
@@ -59,7 +59,22 @@ export interface AccessLogsConfig {
     readonly s3Bucket?: IBucket;
 
     /**
+     * Optional custom CloudWatch Log Group.
+     * Can be either a LogGroup object or a log group name string.
+     * If provided, this log group will be used instead of creating a new one.
+     */
+    readonly logGroup?: LogGroup | string;
+
+    /**
+     * Optional custom log group name when auto-creating a log group.
+     * Only used when logGroup is not provided.
+     * If not specified, CloudFormation will auto-generate a name.
+     */
+    readonly logGroupName?: string;
+
+    /**
      * Optional CloudWatch Logs retention period (default: 7 days)
+     * Ignored if a custom logGroup is provided.
      */
     readonly retention?: RetentionDays;
 
@@ -170,8 +185,40 @@ export interface CreateAuthorizerFunctionProps {
  * const apiCustomLogs = new HttpApi(this, 'ApiCustomLogs', {
  *   name: 'my-api',
  *   accessLogs: {
- *     s3Bucket: myLogsBucket,
- *     retention: RetentionDays.ONE_MONTH,
+ *     retention: RetentionDays.THIRTEEN_MONTHS,
+ *     logGroupName: '/aws/apigateway/my-api',
+ *   },
+ *   stack: { id: 'my-app', tags: [] },
+ * });
+ * 
+ * // API with auto-generated log group name
+ * const apiAutoLogName = new HttpApi(this, 'ApiAutoLogName', {
+ *   name: 'my-api',
+ *   accessLogs: {
+ *     retention: RetentionDays.THIRTEEN_MONTHS,
+ *     // logGroupName not specified - CloudFormation will auto-generate
+ *   },
+ *   stack: { id: 'my-app', tags: [] },
+ * });
+ * 
+ * // API with custom log group (by object)
+ * const customLogGroup = new LogGroup(this, 'CustomLogs', {
+ *   logGroupName: '/my-custom/api-logs',
+ *   retention: RetentionDays.ONE_YEAR,
+ * });
+ * const apiWithCustomLogGroup = new HttpApi(this, 'ApiCustomLogGroup', {
+ *   name: 'my-api',
+ *   accessLogs: {
+ *     logGroup: customLogGroup,
+ *   },
+ *   stack: { id: 'my-app', tags: [] },
+ * });
+ * 
+ * // API with custom log group (by name)
+ * const apiWithLogGroupName = new HttpApi(this, 'ApiLogGroupName', {
+ *   name: 'my-api',
+ *   accessLogs: {
+ *     logGroup: '/my-existing/log-group',
  *   },
  *   stack: { id: 'my-app', tags: [] },
  * });
@@ -179,7 +226,7 @@ export interface CreateAuthorizerFunctionProps {
  */
 export class HttpApi extends Construct {
     #httpApi: AwsHttpApi;
-    #logGroup?: LogGroup;
+    #logGroup?: ILogGroup;
 
     constructor(scope: Construct, id: string, props: HttpApiProps) {
         super(scope, id);
@@ -211,12 +258,21 @@ export class HttpApi extends Construct {
         if (props.accessLogs) {
             const logsConfig = typeof props.accessLogs === 'boolean' ? {} : props.accessLogs;
 
-            // Create CloudWatch Log Group
-            this.#logGroup = new LogGroup(this, 'AccessLogs', {
-                logGroupName: `/aws/apigateway/${props.name ?? props.stack.id}`,
-                retention: logsConfig.retention ?? RetentionDays.ONE_WEEK,
-                removalPolicy: RemovalPolicy.DESTROY,
-            });
+            // Use custom log group or create a new one
+            if (logsConfig.logGroup) {
+                // If logGroup is a string, reference existing log group by name
+                this.#logGroup = typeof logsConfig.logGroup === 'string'
+                    ? LogGroup.fromLogGroupName(this, 'AccessLogs', logsConfig.logGroup)
+                    : logsConfig.logGroup;
+            } else {
+                // Create a new log group with auto-generated name based on API name
+                const logGroupName = logsConfig.logGroupName ?? `/aws/apigateway/${props.name ?? props.stack.id}`;
+                this.#logGroup = new LogGroup(this, 'AccessLogs', {
+                    logGroupName,
+                    retention: logsConfig.retention ?? RetentionDays.ONE_WEEK,
+                    removalPolicy: RemovalPolicy.DESTROY,
+                });
+            }
 
             // Configure default stage with access logging
             const defaultStage = this.#httpApi.defaultStage?.node.defaultChild as any;
@@ -281,7 +337,7 @@ export class HttpApi extends Construct {
     /**
      * Gets the CloudWatch Log Group for access logs (if enabled)
      */
-    get logGroup(): LogGroup | undefined {
+    get logGroup(): ILogGroup | undefined {
         return this.#logGroup;
     }
 

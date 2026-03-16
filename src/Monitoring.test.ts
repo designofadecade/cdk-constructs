@@ -948,6 +948,258 @@ describe('Monitoring', () => {
             });
         });
 
+        describe('Access Analyzer', () => {
+            it('creates Monitoring with Access Analyzer enabled', () => {
+                const app = new App();
+                const stack = new Stack(app, 'TestStack');
+
+                const monitoring = new Monitoring(stack, 'Monitoring', {
+                    accessAnalyzer: {
+                        enabled: true,
+                    },
+                });
+
+                const template = Template.fromStack(stack);
+
+                // Verify Access Analyzer created
+                template.hasResourceProperties('AWS::AccessAnalyzer::Analyzer', {
+                    Type: 'ACCOUNT',
+                });
+
+                // Verify EventBridge rule created
+                template.hasResourceProperties('AWS::Events::Rule', {
+                    EventPattern: {
+                        source: ['aws.access-analyzer'],
+                        'detail-type': ['Access Analyzer Finding'],
+                        detail: {
+                            status: ['ACTIVE'],
+                        },
+                    },
+                });
+
+                expect(monitoring.accessAnalyzerRule).toBeDefined();
+                expect(monitoring.analyzer).toBeDefined();
+            });
+
+            it('creates Monitoring with Access Analyzer custom name', () => {
+                const app = new App();
+                const stack = new Stack(app, 'TestStack');
+
+                new Monitoring(stack, 'Monitoring', {
+                    accessAnalyzer: {
+                        enabled: true,
+                        analyzerName: 'my-custom-analyzer',
+                    },
+                });
+
+                const template = Template.fromStack(stack);
+                template.hasResourceProperties('AWS::AccessAnalyzer::Analyzer', {
+                    AnalyzerName: 'my-custom-analyzer',
+                    Type: 'ACCOUNT',
+                });
+            });
+
+            it('creates Monitoring with Access Analyzer ORGANIZATION type', () => {
+                const app = new App();
+                const stack = new Stack(app, 'TestStack');
+
+                new Monitoring(stack, 'Monitoring', {
+                    accessAnalyzer: {
+                        enabled: true,
+                        type: 'ORGANIZATION',
+                    },
+                });
+
+                const template = Template.fromStack(stack);
+                template.hasResourceProperties('AWS::AccessAnalyzer::Analyzer', {
+                    Type: 'ORGANIZATION',
+                });
+            });
+
+            it('creates Monitoring with Access Analyzer filtering by resource types', () => {
+                const app = new App();
+                const stack = new Stack(app, 'TestStack');
+
+                new Monitoring(stack, 'Monitoring', {
+                    accessAnalyzer: {
+                        enabled: true,
+                        resourceTypes: ['AWS::S3::Bucket', 'AWS::IAM::Role'],
+                    },
+                });
+
+                const template = Template.fromStack(stack);
+                template.hasResourceProperties('AWS::Events::Rule', {
+                    EventPattern: {
+                        source: ['aws.access-analyzer'],
+                        'detail-type': ['Access Analyzer Finding'],
+                        detail: {
+                            status: ['ACTIVE'],
+                            resourceType: ['AWS::S3::Bucket', 'AWS::IAM::Role'],
+                        },
+                    },
+                });
+            });
+
+            it('creates Monitoring with Access Analyzer filtering by finding types', () => {
+                const app = new App();
+                const stack = new Stack(app, 'TestStack');
+
+                new Monitoring(stack, 'Monitoring', {
+                    accessAnalyzer: {
+                        enabled: true,
+                        findingTypes: ['ExternalPrincipal', 'UnusedAccess'],
+                    },
+                });
+
+                const template = Template.fromStack(stack);
+                template.hasResourceProperties('AWS::Events::Rule', {
+                    EventPattern: {
+                        source: ['aws.access-analyzer'],
+                        'detail-type': ['Access Analyzer Finding'],
+                        detail: {
+                            status: ['ACTIVE'],
+                            findingType: ['ExternalPrincipal', 'UnusedAccess'],
+                        },
+                    },
+                });
+            });
+
+            it('creates Monitoring with Access Analyzer activeOnly=false', () => {
+                const app = new App();
+                const stack = new Stack(app, 'TestStack');
+
+                new Monitoring(stack, 'Monitoring', {
+                    accessAnalyzer: {
+                        enabled: true,
+                        activeOnly: false,
+                    },
+                });
+
+                const template = Template.fromStack(stack);
+
+                // Verify EventBridge rule without status filter
+                template.hasResourceProperties('AWS::Events::Rule', {
+                    EventPattern: {
+                        source: ['aws.access-analyzer'],
+                        'detail-type': ['Access Analyzer Finding'],
+                    },
+                });
+            });
+
+            it('creates Monitoring with Access Analyzer custom rule name and description', () => {
+                const app = new App();
+                const stack = new Stack(app, 'TestStack');
+
+                new Monitoring(stack, 'Monitoring', {
+                    accessAnalyzer: {
+                        enabled: true,
+                        ruleName: 'my-analyzer-rule',
+                        ruleDescription: 'My custom Access Analyzer monitoring',
+                    },
+                });
+
+                const template = Template.fromStack(stack);
+                template.hasResourceProperties('AWS::Events::Rule', {
+                    Name: 'my-analyzer-rule',
+                    Description: 'My custom Access Analyzer monitoring',
+                });
+            });
+
+            it('Access Analyzer rule sends events to SNS topic', () => {
+                const app = new App();
+                const stack = new Stack(app, 'TestStack');
+
+                new Monitoring(stack, 'Monitoring', {
+                    accessAnalyzer: {
+                        enabled: true,
+                    },
+                });
+
+                const template = Template.fromStack(stack);
+
+                // Verify EventBridge rule targets SNS topic
+                template.hasResourceProperties('AWS::Events::Rule', {
+                    Targets: Match.arrayWith([
+                        Match.objectLike({
+                            Arn: Match.anyValue(),
+                        }),
+                    ]),
+                });
+            });
+
+            it('Access Analyzer includes ManagedBy tag', () => {
+                const app = new App();
+                const stack = new Stack(app, 'TestStack');
+
+                new Monitoring(stack, 'Monitoring', {
+                    accessAnalyzer: {
+                        enabled: true,
+                        analyzerName: 'test-analyzer',
+                    },
+                });
+
+                const template = Template.fromStack(stack);
+                template.hasResourceProperties('AWS::AccessAnalyzer::Analyzer', {
+                    Tags: Match.arrayWith([
+                        Match.objectLike({
+                            Key: 'ManagedBy',
+                            Value: 'CDK',
+                        }),
+                        Match.objectLike({
+                            Key: 'Name',
+                            Value: 'test-analyzer',
+                        }),
+                    ]),
+                });
+            });
+
+            it('EventBridge rule depends on Access Analyzer', () => {
+                const app = new App();
+                const stack = new Stack(app, 'TestStack');
+
+                new Monitoring(stack, 'Monitoring', {
+                    accessAnalyzer: {
+                        enabled: true,
+                    },
+                });
+
+                const template = Template.fromStack(stack);
+
+                // Get the resources
+                const resources = template.toJSON().Resources;
+
+                // Find the EventBridge rule
+                const ruleKey = Object.keys(resources).find(key =>
+                    resources[key].Type === 'AWS::Events::Rule' &&
+                    resources[key].Properties?.EventPattern?.source?.includes('aws.access-analyzer')
+                );
+
+                // Find the Access Analyzer
+                const analyzerKey = Object.keys(resources).find(key =>
+                    resources[key].Type === 'AWS::AccessAnalyzer::Analyzer'
+                );
+
+                // Verify dependency exists
+                expect(ruleKey).toBeDefined();
+                expect(analyzerKey).toBeDefined();
+                expect(resources[ruleKey!].DependsOn).toContain(analyzerKey);
+            });
+
+            it('does not create Access Analyzer when disabled', () => {
+                const app = new App();
+                const stack = new Stack(app, 'TestStack');
+
+                const monitoring = new Monitoring(stack, 'Monitoring');
+
+                const template = Template.fromStack(stack);
+                template.resourceCountIs('AWS::AccessAnalyzer::Analyzer', 0);
+                template.resourceCountIs('AWS::Events::Rule', 0);
+
+                expect(monitoring.accessAnalyzerRule).toBeUndefined();
+                expect(monitoring.analyzer).toBeUndefined();
+            });
+        });
+
         describe('GuardDuty severity constants', () => {
             it('exposes correct severity constant values', () => {
                 expect(Monitoring.GUARD_DUTY_MIN_SEVERITY_LOW).toBe('LOW');

@@ -7,6 +7,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **HttpApi: Enhanced access logs configuration**
+  - Support for custom CloudWatch Log Groups (by object or by name reference)
+  - Support for custom log group names when auto-creating a new log group
+  - Auto-generated log group names based on API name (format: `/aws/apigateway/{api-name}`)
+  - Custom log format support with default JSON format including common fields
+  - S3 bucket reference option for configuring CloudWatch Logs export to S3
+  - New getter `logGroup` to access the CloudWatch Log Group (if access logs enabled)
+  - Log group has automatic removal policy (DESTROY) for easier cleanup
+
+- **HttpApi: Improved CORS configuration**
+  - Support for boolean value `true` to enable CORS with sensible defaults
+  - Default CORS settings: allow all origins (`['*']`), common HTTP methods (GET, POST, PUT, DELETE, OPTIONS)
+  - Support for custom CORS configuration with allowOrigins, allowMethods, allowHeaders, allowCredentials
+  - CORS disabled by default (must be explicitly enabled)
+
+- **HttpApi: Lambda authorizer support**
+  - New static method `createAuthorizerFunction()` for creating Lambda authorizers
+  - Support for configurable cache TTL (default: 300 seconds)
+  - Uses simple response type for authorizer responses
+  - Reads identity from cookie header (`$request.header.cookie`)
+  - Returns `HttpLambdaAuthorizer` instance for use with route integrations
+
+- **HttpApi: Improved route integration**
+  - `addFunctionIntegration()` now supports optional authorizer in options parameter
+  - Support for multiple HTTP methods per route (GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS, ANY)
+  - Automatic route path sanitization for CloudFormation resource naming
+
+- **Monitoring: Access Analyzer automatic creation**
+  - Access Analyzer is now automatically created when `accessAnalyzer.enabled` is set to `true`
+  - No longer requires pre-existing Access Analyzer in your AWS account
+  - New `analyzerName` property for custom analyzer names (default: `{stack-name}-access-analyzer`)
+  - New `type` property to choose between `ACCOUNT` or `ORGANIZATION` level analysis (default: `ACCOUNT`)
+  - New `findingTypes` property to filter findings by type (e.g., `ExternalPrincipal`, `UnusedAccess`)
+  - Analyzer is automatically tagged with `Name` and `ManagedBy: CDK` tags
+  - New getter `analyzer` to access the created CfnAnalyzer instance
+  - Only one analyzer of each type can exist per region
+
+### Changed
+- **HttpApi: Access logs behavior**
+  - Access logs now disabled by default (previously may have been enabled)
+  - When enabled with `accessLogs: true`, uses 7-day retention (ONE_WEEK) by default
+  - Log group name defaults to `/aws/apigateway/{api-name}` when not specified
+
+- **Monitoring: Access Analyzer behavior**
+  - **BREAKING**: Now creates the Access Analyzer resource automatically instead of requiring it to exist
+  - If you have an existing analyzer, you may need to import it or remove this feature to avoid conflicts
+  - Organization-level analyzers require organization admin permissions
+
 ## [1.20.1] - 2026-03-16
 
 ### Added

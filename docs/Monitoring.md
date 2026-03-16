@@ -471,11 +471,22 @@ Configuration for IAM Access Analyzer monitoring:
 
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
-| `enabled` | `boolean` | required | Enable Access Analyzer findings monitoring |
+| `enabled` | `boolean` | required | Enable Access Analyzer creation and findings monitoring |
+| `analyzerName` | `string` | `{stack-name}-access-analyzer` | Name for the Access Analyzer resource |
+| `type` | `'ACCOUNT' \| 'ORGANIZATION'` | `'ACCOUNT'` | Analyzer type: account-level or organization-wide |
+| `findingTypes` | `string[]` | undefined (all) | Filter by finding types (e.g., 'ExternalPrincipal', 'UnusedAccess') |
 | `resourceTypes` | `string[]` | undefined (all) | Filter by resource types (e.g., 'AWS::S3::Bucket') |
 | `activeOnly` | `boolean` | `true` | Only alert on ACTIVE findings |
 | `ruleName` | `string` | auto-generated | EventBridge rule name |
 | `ruleDescription` | `string` | auto-generated | EventBridge rule description |
+
+**Analyzer Types:**
+- `'ACCOUNT'` - Analyzes resources within the current AWS account
+- `'ORGANIZATION'` - Analyzes resources across the entire organization (requires org admin)
+
+**Common finding types:**
+- `'ExternalPrincipal'` - Resources accessible by external AWS accounts or public
+- `'UnusedAccess'` - IAM permissions granted but never used
 
 **Common resource types:**
 - `'AWS::S3::Bucket'` - S3 buckets
@@ -807,9 +818,16 @@ if (monitoring.guardDutyRule) {
 
 ### IAM Access Analyzer Findings
 
-Monitor IAM Access Analyzer findings for unintended resource access. Access Analyzer findings are sent to the same SNS topic as your CloudWatch alarms and GuardDuty findings.
+Monitor IAM Access Analyzer findings for unintended resource access. When enabled, the Monitoring construct automatically creates an Access Analyzer in your AWS account and configures EventBridge rules to send findings to your SNS topic.
 
-**Prerequisites**: IAM Access Analyzer must be enabled in your AWS account, with an analyzer created for your organization or account.
+**What it creates:**
+- ✅ AWS Access Analyzer resource (ACCOUNT or ORGANIZATION level)
+- ✅ EventBridge rule to capture Access Analyzer findings
+- ✅ Integration with your SNS topic for notifications
+
+**Prerequisites:** 
+- For ORGANIZATION-level analyzers, your account must be the organization admin
+- Only one analyzer of each type (ACCOUNT/ORGANIZATION) can exist per region
 
 #### Basic Access Analyzer Monitoring
 
@@ -826,14 +844,53 @@ const monitoring = new Monitoring(this, 'SecurityMonitoring', {
       messagePrefix: '[IAM]',
     }),
   ],
-  // Enable Access Analyzer monitoring
+  // Enable Access Analyzer monitoring (creates analyzer + EventBridge rule)
   accessAnalyzer: {
     enabled: true,
   },
 });
+
+// Access the created analyzer
+console.log('Analyzer Name:', monitoring.analyzer?.analyzerName);
+console.log('Analyzer ARN:', monitoring.analyzer?.attrArn);
 ```
 
-This will send notifications for all ACTIVE findings (unintended access detected).
+This will:
+1. Create an account-level Access Analyzer named `{stack-name}-access-analyzer`
+2. Create an EventBridge rule to capture findings
+3. Send notifications for all ACTIVE findings (unintended access detected)
+
+#### Custom Analyzer Name and Type
+
+```typescript
+accessAnalyzer: {
+  enabled: true,
+  analyzerName: 'my-production-analyzer', // Custom name
+  type: 'ACCOUNT', // or 'ORGANIZATION' for org-wide analysis
+}
+```
+
+**Analyzer Types:**
+- `ACCOUNT` (default): Analyzes resources within the current AWS account
+- `ORGANIZATION`: Analyzes resources across your entire AWS organization (requires org admin permissions)
+
+#### Filter by Finding Type
+
+Monitor specific finding types:
+
+```typescript
+accessAnalyzer: {
+  enabled: true,
+  findingTypes: [
+    'ExternalPrincipal', // Resource shared with external principals
+    'UnusedAccess',      // Permissions granted but not used
+  ],
+}
+```
+
+**Common finding types:**
+- `ExternalPrincipal` - Resources accessible by external AWS accounts or public
+- `UnusedAccess` - IAM permissions granted but never used (requires 90 days of data)
 
 #### Filter by Resource Type
 
@@ -873,11 +930,14 @@ accessAnalyzer: {
 
 #### Custom Rule Configuration
 
-Customize the EventBridge rule:
+Customize the EventBridge rule and analyzer:
 
 ```typescript
 accessAnalyzer: {
   enabled: true,
+  analyzerName: 'production-analyzer',
+  type: 'ACCOUNT',
+  findingTypes: ['ExternalPrincipal'],
   resourceTypes: ['AWS::S3::Bucket', 'AWS::IAM::Role'],
   ruleName: 'production-access-analyzer-alerts',
   ruleDescription: 'Access Analyzer findings for S3 and IAM resources',
@@ -901,6 +961,9 @@ const monitoring = new Monitoring(this, 'IamSecurityMonitoring', {
   ],
   accessAnalyzer: {
     enabled: true,
+    analyzerName: 'production-security-analyzer',
+    type: 'ACCOUNT',
+    findingTypes: ['ExternalPrincipal'], // Only external access findings
     resourceTypes: [
       'AWS::S3::Bucket',
       'AWS::IAM::Role',
@@ -911,16 +974,27 @@ const monitoring = new Monitoring(this, 'IamSecurityMonitoring', {
     ruleDescription: 'Critical IAM Access Analyzer findings',
   },
 });
+
+// Access the created resources
+console.log('Analyzer ARN:', monitoring.analyzer?.attrArn);
+console.log('Rule ARN:', monitoring.accessAnalyzerRule?.ruleArn);
 ```
 
-#### Access Analyzer Rule
+#### Access Analyzer Resources
 
-The EventBridge rule is accessible via the `accessAnalyzerRule` property:
+The created resources are accessible via public properties:
 
 ```typescript
-// Access the Access Analyzer rule after creation
+// Access the Access Analyzer
+if (monitoring.analyzer) {
+  console.log('Analyzer Name:', monitoring.analyzer.analyzerName);
+  console.log('Analyzer Type:', monitoring.analyzer.type);
+  monitoring.analyzer.attrArn; // Full ARN
+}
+
+// Access the EventBridge rule
 if (monitoring.accessAnalyzerRule) {
-  console.log('Access Analyzer Rule ARN:', monitoring.accessAnalyzerRule.ruleArn);
+  console.log('Rule ARN:', monitoring.accessAnalyzerRule.ruleArn);
 }
 ```
 
@@ -1020,6 +1094,9 @@ monitoring.alarms: Alarm[]
 
 // GuardDuty EventBridge rule (if enabled)
 monitoring.guardDutyRule?: IRule
+
+// IAM Access Analyzer resource (if enabled)
+monitoring.analyzer?: CfnAnalyzer
 
 // IAM Access Analyzer EventBridge rule (if enabled)
 monitoring.accessAnalyzerRule?: IRule
