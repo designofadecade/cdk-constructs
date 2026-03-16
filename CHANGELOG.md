@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.25.1] - 2026-03-16
+
+### Added
+- **WAF: Static constants for oversize handling modes**
+  - New `OVERSIZE_CONTINUE` constant for standard inspection behavior
+  - New `OVERSIZE_MATCH` constant for blocking oversized content
+  - Improves code readability and maintainability for oversize handling configuration
+  - Updated documentation to reference constants in examples
+
 ## [1.25.0] - 2026-03-16
 
 ### Added

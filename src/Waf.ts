@@ -144,8 +144,8 @@ export interface PayloadSizeConstraintConfig {
 
     /**
      * Oversize handling - what to do when content is larger than WAF can inspect
-     * - 'CONTINUE': Inspect what WAF can and apply the size check normally
-     * - 'MATCH': Automatically treat oversized content as a match (will be blocked)
+     * - 'CONTINUE' (Waf.OVERSIZE_CONTINUE): Inspect what WAF can and apply size check normally
+     * - 'MATCH' (Waf.OVERSIZE_MATCH): Automatically treat oversized content as a match (will be blocked)
      * @default 'CONTINUE' - Standard inspection behavior
      */
     readonly oversizeHandling?: 'CONTINUE' | 'MATCH';
@@ -292,6 +292,16 @@ export class Waf extends Construct {
      * Body size inspection limit: 64 KB (maximum, recommended for enhanced security)
      */
     static readonly BODY_SIZE_64KB: BodySizeInspectionLimit = 'KB_64';
+
+    /**
+     * Oversize handling: Continue - Inspect what WAF can and apply the size check normally
+     */
+    static readonly OVERSIZE_CONTINUE: 'CONTINUE' = 'CONTINUE';
+
+    /**
+     * Oversize handling: Match - Automatically treat oversized content as a match (will be blocked)
+     */
+    static readonly OVERSIZE_MATCH: 'MATCH' = 'MATCH';
 
     /**
      * Payload size: 8 KB (8192 bytes) - Small API requests
@@ -713,8 +723,8 @@ export class Waf extends Construct {
      * // Block requests with body > 1 MB (using constant)
      * const largePayload = Waf.PayloadSizeConstraint(Waf.PAYLOAD_1MB, 3);
      * 
-     * // Block any request larger than WAF can inspect
-     * const strict = Waf.PayloadSizeConstraint(Waf.PAYLOAD_32KB, 3, 'BODY', 'MATCH');
+     * // Block any request larger than WAF can inspect (using constant)
+     * const strict = Waf.PayloadSizeConstraint(Waf.PAYLOAD_32KB, 3, 'BODY', Waf.OVERSIZE_MATCH);
      * 
      * // Or use literal values
      * const custom = Waf.PayloadSizeConstraint(524288, 3); // 512 KB
