@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.25.0] - 2026-03-16
+
+### Added
+- **WAF: Oversize handling configuration for payload size constraints**
+  - New `oversizeHandling` option in `PayloadSizeConstraintConfig` interface
+  - Supports `'CONTINUE'` (default) and `'MATCH'` modes for handling oversized content
+  - `'CONTINUE'`: Inspects what WAF can and applies size check normally
+  - `'MATCH'`: Automatically blocks content larger than WAF can inspect
+  - Updated `PayloadSizeConstraint()` helper method to accept `oversizeHandling` parameter
+  - Provides finer control over security posture for large payload handling
+  - Aligns with AWS WAF console configuration options for oversize handling
+
 ## [1.24.1] - 2026-03-16
 
 ### Fixed
