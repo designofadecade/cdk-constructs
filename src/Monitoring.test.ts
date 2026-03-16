@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { App, Stack, RemovalPolicy } from 'aws-cdk-lib';
+import { App, Stack, RemovalPolicy, Duration } from 'aws-cdk-lib';
 import { Template, Match } from 'aws-cdk-lib/assertions';
 import { RetentionDays } from 'aws-cdk-lib/aws-logs';
 import { ComparisonOperator, Metric } from 'aws-cdk-lib/aws-cloudwatch';
@@ -1197,6 +1197,170 @@ describe('Monitoring', () => {
 
                 expect(monitoring.accessAnalyzerRule).toBeUndefined();
                 expect(monitoring.analyzer).toBeUndefined();
+            });
+        });
+
+        describe('Cross-Region Forwarding', () => {
+            it('creates Monitoring with cross-region forwarding enabled', () => {
+                const app = new App();
+                const stack = new Stack(app, 'TestStack', {
+                    env: { account: '123456789012', region: 'us-east-1' },
+                });
+
+                const targetTopicArn = 'arn:aws:sns:ca-central-1:123456789012:centralized-monitoring';
+
+                const monitoring = new Monitoring(stack, 'Monitoring', {
+                    forwardToTopic: {
+                        topicArn: targetTopicArn,
+                        region: 'ca-central-1',
+                    },
+                });
+
+                const template = Template.fromStack(stack);
+
+                // Verify Lambda forwarder function created
+                template.hasResourceProperties('AWS::Lambda::Function', {
+                    Runtime: 'nodejs24.x',
+                    Handler: 'handler.handler',
+                    Environment: {
+                        Variables: {
+                            TARGET_TOPIC_ARN: targetTopicArn,
+                            TARGET_REGION: 'ca-central-1',
+                        },
+                    },
+                    Timeout: 30,
+                    MemorySize: 128,
+                });
+
+                // Verify IAM policy allows publishing to target topic
+                template.hasResourceProperties('AWS::IAM::Policy', {
+                    PolicyDocument: {
+                        Statement: Match.arrayWith([
+                            Match.objectLike({
+                                Effect: 'Allow',
+                                Action: 'sns:Publish',
+                                Resource: targetTopicArn,
+                            }),
+                        ]),
+                    },
+                });
+
+                // Verify Lambda subscription to SNS topic
+                template.hasResourceProperties('AWS::SNS::Subscription', {
+                    Protocol: 'lambda',
+                    TopicArn: Match.anyValue(),
+                });
+
+                expect(monitoring.forwarderFunction).toBeDefined();
+            });
+
+            it('creates Monitoring with cross-region forwarding and custom function name', () => {
+                const app = new App();
+                const stack = new Stack(app, 'TestStack', {
+                    env: { account: '123456789012', region: 'us-east-1' },
+                });
+
+                new Monitoring(stack, 'Monitoring', {
+                    forwardToTopic: {
+                        topicArn: 'arn:aws:sns:ca-central-1:123456789012:centralized-monitoring',
+                        region: 'ca-central-1',
+                        functionName: 'my-custom-forwarder',
+                    },
+                });
+
+                const template = Template.fromStack(stack);
+                template.hasResourceProperties('AWS::Lambda::Function', {
+                    FunctionName: 'my-custom-forwarder',
+                });
+            });
+
+            it('creates Monitoring with cross-region forwarding and custom timeout', () => {
+                const app = new App();
+                const stack = new Stack(app, 'TestStack', {
+                    env: { account: '123456789012', region: 'us-east-1' },
+                });
+
+                new Monitoring(stack, 'Monitoring', {
+                    forwardToTopic: {
+                        topicArn: 'arn:aws:sns:ca-central-1:123456789012:centralized-monitoring',
+                        region: 'ca-central-1',
+                        timeout: Duration.seconds(60),
+                    },
+                });
+
+                const template = Template.fromStack(stack);
+                template.hasResourceProperties('AWS::Lambda::Function', {
+                    Timeout: 60,
+                });
+            });
+
+            it('creates Monitoring with cross-region forwarding and custom memory size', () => {
+                const app = new App();
+                const stack = new Stack(app, 'TestStack', {
+                    env: { account: '123456789012', region: 'us-east-1' },
+                });
+
+                new Monitoring(stack, 'Monitoring', {
+                    forwardToTopic: {
+                        topicArn: 'arn:aws:sns:ca-central-1:123456789012:centralized-monitoring',
+                        region: 'ca-central-1',
+                        memorySize: 256,
+                    },
+                });
+
+                const template = Template.fromStack(stack);
+                template.hasResourceProperties('AWS::Lambda::Function', {
+                    MemorySize: 256,
+                });
+            });
+
+            it('creates Monitoring with both GuardDuty and cross-region forwarding', () => {
+                const app = new App();
+                const stack = new Stack(app, 'TestStack', {
+                    env: { account: '123456789012', region: 'us-east-1' },
+                });
+
+                const monitoring = new Monitoring(stack, 'Monitoring', {
+                    guardDuty: {
+                        enabled: true,
+                        minSeverity: Monitoring.GUARD_DUTY_MIN_SEVERITY_LOW,
+                    },
+                    forwardToTopic: {
+                        topicArn: 'arn:aws:sns:ca-central-1:123456789012:centralized-monitoring',
+                        region: 'ca-central-1',
+                    },
+                });
+
+                const template = Template.fromStack(stack);
+
+                // Verify both GuardDuty EventBridge rule and Lambda forwarder created
+                template.hasResourceProperties('AWS::Events::Rule', {
+                    EventPattern: {
+                        source: ['aws.guardduty'],
+                        'detail-type': ['GuardDuty Finding'],
+                    },
+                });
+
+                template.hasResourceProperties('AWS::Lambda::Function', {
+                    Environment: {
+                        Variables: {
+                            TARGET_TOPIC_ARN: 'arn:aws:sns:ca-central-1:123456789012:centralized-monitoring',
+                            TARGET_REGION: 'ca-central-1',
+                        },
+                    },
+                });
+
+                expect(monitoring.guardDutyRule).toBeDefined();
+                expect(monitoring.forwarderFunction).toBeDefined();
+            });
+
+            it('does not create forwarder when not configured', () => {
+                const app = new App();
+                const stack = new Stack(app, 'TestStack');
+
+                const monitoring = new Monitoring(stack, 'Monitoring');
+
+                expect(monitoring.forwarderFunction).toBeUndefined();
             });
         });
 

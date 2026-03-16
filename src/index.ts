@@ -102,4 +102,8 @@ export type {
     AlarmConfig,
     SnsTopicConfig,
     LogGroupConfig,
+    GuardDutyConfig,
+    GuardDutySeverity,
+    AccessAnalyzerConfig,
+    ForwardToTopicConfig,
 } from './Monitoring.js';

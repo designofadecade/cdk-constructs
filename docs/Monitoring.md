@@ -12,7 +12,8 @@ The Monitoring construct provides a complete monitoring solution with CloudWatch
 - 💬 **Multi-Platform Notifications**: Send formatted messages to Slack, Teams, or Google Chat
 - 🛡️ **GuardDuty Integration**: Monitor AWS GuardDuty security findings with configurable severity levels
 - 🔑 **IAM Access Analyzer**: Detect unintended resource access with Access Analyzer findings
-- 🎯 **Instance-Based API**: Create a monitoring construct and add alarms as needed
+- � **Cross-Region Forwarding**: Automatically forward alerts to centralized SNS topics in other regions
+- �🎯 **Instance-Based API**: Create a monitoring construct and add alarms as needed
 - 🔄 **Shared Lambda Functions**: Efficient resource usage with reusable processors
 - ⚙️ **Sensible Defaults**: Pre-configured with production-ready settings
 - 🔌 **Flexible Integration**: Works with any CloudWatch log group
@@ -387,6 +388,7 @@ Main configuration for the Monitoring construct:
 | `logErrorFunctionName` | `string` | undefined | Optional name for shared log error processing function |
 | `guardDuty` | `GuardDutyConfig` | undefined | GuardDuty monitoring configuration |
 | `accessAnalyzer` | `AccessAnalyzerConfig` | undefined | IAM Access Analyzer monitoring configuration |
+| `forwardToTopic` | `ForwardToTopicConfig` | undefined | Cross-region SNS topic forwarding configuration |
 
 ### NotificationHandler
 
@@ -496,6 +498,27 @@ Configuration for IAM Access Analyzer monitoring:
 - `'AWS::Lambda::LayerVersion'` - Lambda layers
 - `'AWS::SQS::Queue'` - SQS queues
 - `'AWS::SecretsManager::Secret'` - Secrets Manager secrets
+
+### ForwardToTopicConfig
+
+Configuration for cross-region SNS topic forwarding:
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `topicArn` | `string` | required | ARN of the target SNS topic in another region |
+| `region` | `string` | required | AWS region of the target topic |
+| `functionName` | `string` | auto-generated | Optional name for the Lambda forwarder function |
+| `timeout` | `Duration` | `Duration.seconds(30)` | Timeout for the forwarder Lambda function |
+| `memorySize` | `number` | `128` | Memory size (MB) for the forwarder Lambda function |
+
+**Example ARNs:**
+- `arn:aws:sns:ca-central-1:123456789012:centralized-monitoring`
+- `arn:aws:sns:eu-west-1:123456789012:security-alerts`
+
+**When to use:**
+- Multi-region deployments with centralized monitoring
+- GuardDuty/Access Analyzer enabled in multiple regions
+- CloudFront or other global resources in us-east-1
 
 ## Common Retention Periods
 
@@ -1048,6 +1071,205 @@ console.log('GuardDuty Rule:', monitoring.guardDutyRule?.ruleArn);
 console.log('Access Analyzer Rule:', monitoring.accessAnalyzerRule?.ruleArn);
 ```
 
+## Cross-Region SNS Forwarding
+
+Forward monitoring alerts from one AWS region to a centralized SNS topic in another region. This is particularly useful for multi-region deployments where security monitoring services (GuardDuty, Access Analyzer) are enabled in specific regions, but you want all alerts centralized in your primary monitoring region.
+
+### Use Case
+
+When deploying multi-region infrastructure:
+- **Global resources** like CloudFront may require monitoring in specific regions (e.g., us-east-1)
+- **GuardDuty and Access Analyzer** need to be enabled per region to monitor regional resources
+- **Centralized monitoring** infrastructure exists in your primary region (e.g., ca-central-1)
+
+Instead of manually creating Lambda forwarders, the Monitoring construct handles this automatically.
+
+### Basic Cross-Region Forwarding
+
+```typescript
+// In us-east-1: Create monitoring with GuardDuty and forward to ca-central-1
+const globalMonitoring = new Monitoring(this, 'GlobalMonitoring', {
+  topic: {
+    topicName: 'us-east-1-monitoring',
+    displayName: 'US East 1 Monitoring',
+  },
+  guardDuty: {
+    enabled: true,
+    minSeverity: Monitoring.GUARD_DUTY_MIN_SEVERITY_LOW,
+  },
+  accessAnalyzer: {
+    enabled: true,
+  },
+  // Forward all alerts to centralized topic in ca-central-1
+  forwardToTopic: {
+    topicArn: 'arn:aws:sns:ca-central-1:123456789012:centralized-monitoring',
+    region: 'ca-central-1',
+  },
+});
+```
+
+### What It Creates
+
+When `forwardToTopic` is configured, the construct automatically:
+
+1. ✅ **Creates a Lambda function** that forwards SNS messages to the target region
+2. ✅ **Subscribes the Lambda** to the local monitoring SNS topic
+3. ✅ **Grants IAM permissions** for the Lambda to publish to the target topic
+4. ✅ **Preserves message content** including subject, message, and attributes
+5. ✅ **Includes error handling** with CloudWatch Logs for troubleshooting
+
+**No manual setup required** - the construct handles all infrastructure and permissions.
+
+### Custom Function Configuration
+
+Customize the forwarder Lambda function:
+
+```typescript
+forwardToTopic: {
+  topicArn: 'arn:aws:sns:ca-central-1:123456789012:centralized-monitoring',
+  region: 'ca-central-1',
+  functionName: 'my-app-sns-forwarder', // Custom function name
+  timeout: Duration.seconds(60),         // Custom timeout (default: 30s)
+  memorySize: 256,                       // Custom memory (default: 128 MB)
+}
+```
+
+### Multi-Region Security Monitoring Example
+
+Complete example with monitoring in multiple regions forwarding to a central topic:
+
+```typescript
+import { Monitoring } from '@designofadecade/cdk-constructs';
+import { Stack, StackProps } from 'aws-cdk-lib';
+
+// Central monitoring stack in ca-central-1 (primary region)
+class CentralMonitoringStack extends Stack {
+  public readonly monitoringTopicArn: string;
+
+  constructor(scope: Construct, id: string, props?: StackProps) {
+    super(scope, id, props);
+
+    // Create centralized monitoring with Slack notifications
+    const monitoring = new Monitoring(this, 'CentralizedMonitoring', {
+      topic: {
+        topicName: 'centralized-security-alerts',
+        displayName: 'Centralized Security Alerts',
+      },
+      notifications: [
+        Monitoring.slackNotifier({
+          slackWebhookUrl: process.env.SLACK_WEBHOOK_URL!,
+          slackChannel: '#security-alerts',
+          messagePrefix: '🔐 [SECURITY]',
+        }),
+      ],
+      // Monitor regional resources
+      guardDuty: {
+        enabled: true,
+        minSeverity: Monitoring.GUARD_DUTY_MIN_SEVERITY_HIGH,
+      },
+      accessAnalyzer: {
+        enabled: true,
+      },
+    });
+
+    this.monitoringTopicArn = monitoring.topic.topicArn;
+  }
+}
+
+// Global monitoring stack in us-east-1 (for CloudFront, etc.)
+class GlobalMonitoringStack extends Stack {
+  constructor(scope: Construct, id: string, centralTopicArn: string, props?: StackProps) {
+    super(scope, id, props);
+
+    // Monitor global resources and forward to central topic
+    new Monitoring(this, 'GlobalMonitoring', {
+      topic: {
+        topicName: 'us-east-1-monitoring',
+        displayName: 'Global Stack Monitoring (us-east-1)',
+      },
+      guardDuty: {
+        enabled: true,
+        minSeverity: Monitoring.GUARD_DUTY_MIN_SEVERITY_LOW,
+      },
+      accessAnalyzer: {
+        enabled: true,
+        resourceTypes: [
+          'AWS::S3::Bucket',
+          'AWS::IAM::Role',
+          'AWS::KMS::Key',
+          'AWS::Lambda::Function',
+        ],
+      },
+      // Forward all alerts to central monitoring
+      forwardToTopic: {
+        topicArn: centralTopicArn,
+        region: 'ca-central-1',
+      },
+    });
+  }
+}
+
+// Deploy both stacks
+const app = new App();
+
+const centralStack = new CentralMonitoringStack(app, 'CentralMonitoring', {
+  env: { account: '123456789012', region: 'ca-central-1' },
+});
+
+new GlobalMonitoringStack(
+  app,
+  'GlobalMonitoring',
+  centralStack.monitoringTopicArn,
+  {
+    env: { account: '123456789012', region: 'us-east-1' },
+  }
+);
+```
+
+### How It Works
+
+1. **Local Monitoring Topic** - Created in the source region (e.g., us-east-1)
+2. **GuardDuty/Access Analyzer** - Send findings to the local topic via EventBridge
+3. **Forwarder Lambda** - Automatically subscribed to the local topic
+4. **Cross-Region Forwarding** - Lambda publishes to the target topic in another region
+5. **Notification Handlers** - Receive all alerts in the central region
+
+**Message Flow:**
+```
+GuardDuty (us-east-1)
+    ↓
+EventBridge Rule
+    ↓
+SNS Topic (us-east-1)
+    ↓
+Forwarder Lambda
+    ↓
+SNS Topic (ca-central-1)  ← Central monitoring
+    ↓
+Slack/Teams/Google Chat
+```
+
+### Access Forwarder Function
+
+The forwarder Lambda function is accessible via the `forwarderFunction` property:
+
+```typescript
+if (monitoring.forwarderFunction) {
+  console.log('Forwarder ARN:', monitoring.forwarderFunction.functionArn);
+  
+  // Add additional permissions or monitoring
+  monitoring.forwarderFunction.grantInvoke(someRole);
+}
+```
+
+### Benefits
+
+- ✅ **No Boilerplate** - Eliminates 40+ lines of manual Lambda creation code
+- ✅ **Best Practices** - Consistent cross-region forwarding implementation
+- ✅ **Simplified Multi-Region** - Trivial to centralize alerts from any region
+- ✅ **Backward Compatible** - Optional feature, existing code unchanged
+- ✅ **Efficient** - Minimal resource usage with shared infrastructure
+
 ## Notification Message Formats
 
 ### Slack
@@ -1100,6 +1322,9 @@ monitoring.analyzer?: CfnAnalyzer
 
 // IAM Access Analyzer EventBridge rule (if enabled)
 monitoring.accessAnalyzerRule?: IRule
+
+// Cross-region SNS forwarder Lambda function (if enabled)
+monitoring.forwarderFunction?: IFunction
 ```
 
 ## Factory Methods

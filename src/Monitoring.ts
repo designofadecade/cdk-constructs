@@ -121,6 +121,40 @@ export interface AccessAnalyzerConfig {
 }
 
 /**
+ * Cross-region SNS topic forwarding configuration
+ * Enables automatic forwarding of monitoring alerts to a centralized SNS topic in another region
+ */
+export interface ForwardToTopicConfig {
+    /**
+     * ARN of the target SNS topic in another region
+     * Example: 'arn:aws:sns:ca-central-1:123456789012:centralized-monitoring'
+     */
+    readonly topicArn: string;
+
+    /**
+     * AWS region of the target topic
+     * Example: 'ca-central-1'
+     */
+    readonly region: string;
+
+    /**
+     * Optional name for the Lambda forwarder function
+     * Default: auto-generated from stack name
+     */
+    readonly functionName?: string;
+
+    /**
+     * Optional timeout for the forwarder Lambda function (default: 30 seconds)
+     */
+    readonly timeout?: Duration;
+
+    /**
+     * Optional memory size for the forwarder Lambda function (default: 128 MB)
+     */
+    readonly memorySize?: number;
+}
+
+/**
  * Configuration options for the Monitoring construct
  */
 export interface MonitoringProps {
@@ -155,6 +189,16 @@ export interface MonitoringProps {
      * When enabled, Access Analyzer findings will be sent to the same SNS topic
      */
     readonly accessAnalyzer?: AccessAnalyzerConfig;
+
+    /**
+     * Cross-region SNS topic forwarding configuration
+     * When enabled, all messages from the monitoring topic will be automatically forwarded
+     * to a centralized SNS topic in another region
+     * 
+     * Useful for multi-region deployments where security monitoring (GuardDuty, Access Analyzer)
+     * is enabled in multiple regions but alerts are centralized in a primary region
+     */
+    readonly forwardToTopic?: ForwardToTopicConfig;
 }
 
 /**
@@ -291,6 +335,11 @@ export class Monitoring extends Construct {
     public analyzer?: CfnAnalyzer;
 
     /**
+     * Cross-region SNS forwarder Lambda function (if enabled)
+     */
+    public readonly forwarderFunction?: IFunction;
+
+    /**
      * Shared Lambda function for processing log errors
      * Created lazily on first use
      */
@@ -328,6 +377,11 @@ export class Monitoring extends Construct {
         // Setup Access Analyzer monitoring if enabled
         if (props?.accessAnalyzer?.enabled) {
             this.accessAnalyzerRule = this.createAccessAnalyzerRule(props.accessAnalyzer);
+        }
+
+        // Setup cross-region forwarding if enabled
+        if (props?.forwardToTopic) {
+            this.forwarderFunction = this.createForwarderFunction(props.forwardToTopic);
         }
     }
 
@@ -609,6 +663,37 @@ export class Monitoring extends Construct {
         rule.addTarget(new SnsTopic(this.topic));
 
         return rule;
+    }
+
+    /**
+     * Creates a Lambda function to forward SNS messages to a cross-region topic
+     */
+    private createForwarderFunction(config: ForwardToTopicConfig): IFunction {
+        const fn = new LambdaFunction(this, 'SnsForwarderFunction', {
+            runtime: Runtime.NODEJS_24_X,
+            handler: 'handler.handler',
+            code: Code.fromAsset(join(__dirname, 'assets/functions/monitoring/sns-forwarder')),
+            functionName: config.functionName,
+            environment: {
+                TARGET_TOPIC_ARN: config.topicArn,
+                TARGET_REGION: config.region,
+            },
+            timeout: config.timeout ?? Duration.seconds(30),
+            memorySize: config.memorySize ?? 128,
+            description: `Forwards SNS messages to ${config.region}`,
+        });
+
+        // Grant permission to publish to the target SNS topic
+        fn.addToRolePolicy(new PolicyStatement({
+            effect: Effect.ALLOW,
+            actions: ['sns:Publish'],
+            resources: [config.topicArn],
+        }));
+
+        // Subscribe the forwarder to the monitoring topic
+        this.topic.addSubscription(new LambdaSubscription(fn));
+
+        return fn;
     }
 
     /**

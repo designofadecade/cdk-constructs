@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.23.0] - 2026-03-16
+
+### Added
+- **Monitoring: Cross-region SNS topic forwarding**
+  - New `ForwardToTopicConfig` interface for automatic cross-region alert forwarding
+  - New `forwardToTopic` property in `MonitoringProps` to configure cross-region forwarding
+  - Automatically creates and configures Lambda forwarder function when enabled
+  - Forwards all SNS messages (GuardDuty, Access Analyzer, CloudWatch alarms, log errors) to target region
+  - Preserves message content, subject, and attributes during forwarding
+  - Configurable Lambda function name, timeout, and memory size
+  - Grants IAM permissions automatically for cross-region SNS publishing
+  - New public property `forwarderFunction` to access the Lambda forwarder
+  - Eliminates 40+ lines of boilerplate code for multi-region deployments
+  - Simplifies centralized monitoring across multiple AWS regions
+  - Particularly useful for global resources (CloudFront) requiring monitoring in specific regions
+  - Complete documentation with multi-region security monitoring examples
+  - Comprehensive test coverage for all forwarding scenarios
+  - Exported `ForwardToTopicConfig` type in main index
+
+### Changed
+- **Monitoring: Documentation updates**
+  - Added comprehensive "Cross-Region SNS Forwarding" section with detailed examples
+  - Updated features list to include cross-region forwarding capability
+  - Updated MonitoringProps configuration reference with forwardToTopic property
+  - Added ForwardToTopicConfig interface documentation with all properties
+  - Updated instance properties documentation with forwarderFunction property
+  - Added complete multi-region security monitoring example showing us-east-1 → ca-central-1 forwarding
+  - Documented message flow diagram for cross-region architecture
+  - Added benefits section highlighting boilerplate reduction and best practices
+
 ## [1.22.0] - 2026-03-16
 
 ### Added
