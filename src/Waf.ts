@@ -291,6 +291,11 @@ export class Waf extends Construct {
     static readonly PAYLOAD_8KB: number = 8192;
 
     /**
+     * Payload size: 32 KB (32768 bytes) - Medium API requests
+     */
+    static readonly PAYLOAD_32KB: number = 32768;
+
+    /**
      * Payload size: 64 KB (65536 bytes) - Standard requests
      */
     static readonly PAYLOAD_64KB: number = 65536;

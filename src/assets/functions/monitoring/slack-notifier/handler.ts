@@ -45,6 +45,23 @@ interface GuardDutyFinding {
     updatedAt?: string;
 }
 
+interface AccessAnalyzerFinding {
+    id?: string;
+    status?: 'ACTIVE' | 'ARCHIVED' | 'RESOLVED';
+    resourceType?: string;
+    resourceOwnerAccount?: string;
+    resource?: string;
+    principal?: Record<string, any>;
+    action?: string[];
+    condition?: Record<string, any>;
+    findingType?: string;
+    isPublic?: boolean;
+    createdAt?: string;
+    analyzedAt?: string;
+    updatedAt?: string;
+    error?: string;
+}
+
 interface EventBridgeMessage {
     version?: string;
     id?: string;
@@ -53,7 +70,12 @@ interface EventBridgeMessage {
     account?: string;
     time?: string;
     region?: string;
-    detail?: GuardDutyFinding;
+    detail?: GuardDutyFinding | AccessAnalyzerFinding;
+}
+
+// Type guard to check if finding is a GuardDuty finding
+function isGuardDutyFinding(finding: GuardDutyFinding | AccessAnalyzerFinding): finding is GuardDutyFinding {
+    return 'severity' in finding || 'type' in finding || 'service' in finding;
 }
 
 // Cache the webhook URL to avoid repeated SSM calls
@@ -119,10 +141,77 @@ export const handler = async (event: SNSEvent): Promise<{ statusCode: number; bo
 
     let slackMessage;
 
+    // Check if this is an Access Analyzer finding from EventBridge
+    if ('detail-type' in parsedBody && parsedBody['detail-type'] === 'Access Analyzer Finding' && parsedBody.detail) {
+        const ebMessage = parsedBody as EventBridgeMessage;
+        const finding = ebMessage.detail as AccessAnalyzerFinding;
+
+        const status = finding.status || 'ACTIVE';
+        const isActive = status === 'ACTIVE';
+        const emoji = isActive ? ':warning:' : ':white_check_mark:';
+        const color = isActive ? 'warning' : 'good';
+
+        // Build IAM Access Analyzer console URL
+        const findingId = finding.id || '';
+        const findingRegion = ebMessage.region || region;
+        const analyzerUrl = findingId
+            ? `https://${findingRegion}.console.aws.amazon.com/access-analyzer/home?region=${findingRegion}#/findings/${encodeURIComponent(findingId)}`
+            : `https://${findingRegion}.console.aws.amazon.com/access-analyzer/home?region=${findingRegion}`;
+
+        // Extract principal information
+        const principalStr = finding.principal ? Object.entries(finding.principal)
+            .map(([key, value]) => `${key}: ${JSON.stringify(value)}`)
+            .join(', ') : 'Unknown';
+
+        const fields: { title: string; value: string; short: boolean }[] = [
+            { title: 'Status', value: status, short: false },
+            { title: 'Resource Type', value: finding.resourceType || 'Unknown', short: false },
+            { title: 'Resource', value: finding.resource || 'Unknown', short: false },
+            { title: 'Principal', value: principalStr, short: false },
+            { title: 'Finding Type', value: finding.findingType || 'Unknown', short: false },
+        ];
+
+        if (finding.isPublic !== undefined) {
+            fields.push({ title: 'Public Access', value: finding.isPublic ? 'Yes' : 'No', short: false });
+        }
+        if (finding.action && finding.action.length > 0) {
+            fields.push({ title: 'Actions', value: finding.action.join(', '), short: false });
+        }
+        if (finding.createdAt) {
+            fields.push({ title: 'Created', value: finding.createdAt, short: false });
+        }
+
+        slackMessage = {
+            channel: channel,
+            username: 'AWS Access Analyzer',
+            icon_emoji: ':mag:',
+            attachments: [
+                {
+                    color,
+                    title: `${messagePrefix}${messagePrefix ? ' ' : ''}${emoji} IAM Access Analyzer Finding`,
+                    text: `Unintended resource access detected for ${finding.resourceType || 'resource'}`,
+                    fields,
+                    footer: 'AWS IAM Access Analyzer',
+                    ts: Math.floor(Date.parse(ebMessage.time || new Date().toISOString()) / 1000),
+                    actions: [
+                        {
+                            type: 'button',
+                            text: 'View in Access Analyzer',
+                            url: analyzerUrl,
+                        },
+                    ],
+                },
+            ],
+        };
+    }
     // Check if this is a GuardDuty finding from EventBridge
-    if ('detail-type' in parsedBody && parsedBody['detail-type'] === 'GuardDuty Finding' && parsedBody.detail) {
+    else if ('detail-type' in parsedBody && parsedBody['detail-type'] === 'GuardDuty Finding' && parsedBody.detail) {
         const ebMessage = parsedBody as EventBridgeMessage;
         const finding = ebMessage.detail!;
+
+        if (!isGuardDutyFinding(finding)) {
+            throw new Error('Invalid GuardDuty finding structure');
+        }
 
         const severity = finding.severity || 0;
         const severityLabel = severity >= 7 ? 'HIGH' : severity >= 4 ? 'MEDIUM' : 'LOW';

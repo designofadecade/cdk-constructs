@@ -47,6 +47,23 @@ interface GuardDutyFinding {
     updatedAt?: string;
 }
 
+interface AccessAnalyzerFinding {
+    id?: string;
+    status?: 'ACTIVE' | 'ARCHIVED' | 'RESOLVED';
+    resourceType?: string;
+    resourceOwnerAccount?: string;
+    resource?: string;
+    principal?: Record<string, any>;
+    action?: string[];
+    condition?: Record<string, any>;
+    findingType?: string;
+    isPublic?: boolean;
+    createdAt?: string;
+    analyzedAt?: string;
+    updatedAt?: string;
+    error?: string;
+}
+
 interface EventBridgeMessage {
     version?: string;
     id?: string;
@@ -55,7 +72,12 @@ interface EventBridgeMessage {
     account?: string;
     time?: string;
     region?: string;
-    detail?: GuardDutyFinding;
+    detail?: GuardDutyFinding | AccessAnalyzerFinding;
+}
+
+// Type guard to check if finding is a GuardDuty finding
+function isGuardDutyFinding(finding: GuardDutyFinding | AccessAnalyzerFinding): finding is GuardDutyFinding {
+    return 'severity' in finding || 'type' in finding || 'service' in finding;
 }
 
 // Cache the webhook URL to avoid repeated SSM calls
@@ -119,10 +141,108 @@ export const handler = async (event: SNSEvent): Promise<{ statusCode: number; bo
 
     let teamsMessage: any;
 
+    // Check if this is an Access Analyzer finding from EventBridge
+    if ('detail-type' in parsedBody && parsedBody['detail-type'] === 'Access Analyzer Finding' && parsedBody.detail) {
+        const ebMessage = parsedBody as EventBridgeMessage;
+        const finding = ebMessage.detail as AccessAnalyzerFinding;
+
+        const status = finding.status || 'ACTIVE';
+        const isActive = status === 'ACTIVE';
+        const emoji = isActive ? '⚠️' : '✅';
+
+        // Build IAM Access Analyzer console URL
+        const findingId = finding.id || '';
+        const findingRegion = ebMessage.region || region;
+        const analyzerUrl = findingId
+            ? `https://${findingRegion}.console.aws.amazon.com/access-analyzer/home?region=${findingRegion}#/findings/${encodeURIComponent(findingId)}`
+            : `https://${findingRegion}.console.aws.amazon.com/access-analyzer/home?region=${findingRegion}`;
+
+        // Extract principal information
+        const principalStr = finding.principal ? Object.entries(finding.principal)
+            .map(([key, value]) => `${key}: ${JSON.stringify(value)}`)
+            .join(', ') : 'Unknown';
+
+        const facts: Array<{ title: string; value: string }> = [
+            { title: 'Status', value: status },
+            { title: 'Resource Type', value: finding.resourceType || 'Unknown' },
+            { title: 'Resource', value: finding.resource || 'Unknown' },
+            { title: 'Principal', value: principalStr },
+            { title: 'Finding Type', value: finding.findingType || 'Unknown' },
+            { title: 'Time', value: ebMessage.time || new Date().toISOString() },
+        ];
+
+        if (finding.isPublic !== undefined) {
+            facts.push({ title: 'Public Access', value: finding.isPublic ? 'Yes' : 'No' });
+        }
+        if (finding.action && finding.action.length > 0) {
+            facts.push({ title: 'Actions', value: finding.action.join(', ') });
+        }
+        if (finding.createdAt) {
+            facts.push({ title: 'Created', value: finding.createdAt });
+        }
+
+        teamsMessage = {
+            type: 'message',
+            attachments: [
+                {
+                    contentType: 'application/vnd.microsoft.card.adaptive',
+                    content: {
+                        type: 'AdaptiveCard',
+                        $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',
+                        version: '1.4',
+                        msteams: {
+                            width: 'Full',
+                        },
+                        body: [
+                            {
+                                type: 'Container',
+                                style: 'emphasis',
+                                items: [
+                                    {
+                                        type: 'TextBlock',
+                                        text: `${messagePrefix}${messagePrefix ? ' ' : ''}${emoji} IAM Access Analyzer Finding`,
+                                        weight: 'Bolder',
+                                        size: 'Large',
+                                        wrap: true,
+                                        color: isActive ? 'Warning' : 'Good',
+                                    },
+                                    {
+                                        type: 'TextBlock',
+                                        text: `Unintended resource access detected for ${finding.resourceType || 'resource'}`,
+                                        size: 'Medium',
+                                        wrap: true,
+                                        spacing: 'None',
+                                    },
+                                ],
+                            },
+                            {
+                                type: 'FactSet',
+                                facts: facts,
+                                separator: true,
+                                spacing: 'Medium',
+                            },
+                        ],
+                        actions: [
+                            {
+                                type: 'Action.OpenUrl',
+                                title: 'View in Access Analyzer',
+                                url: analyzerUrl,
+                                style: 'positive',
+                            },
+                        ],
+                    },
+                },
+            ],
+        };
+    }
     // Check if this is a GuardDuty finding from EventBridge
-    if ('detail-type' in parsedBody && parsedBody['detail-type'] === 'GuardDuty Finding' && parsedBody.detail) {
+    else if ('detail-type' in parsedBody && parsedBody['detail-type'] === 'GuardDuty Finding' && parsedBody.detail) {
         const ebMessage = parsedBody as EventBridgeMessage;
         const finding = ebMessage.detail!;
+
+        if (!isGuardDutyFinding(finding)) {
+            throw new Error('Invalid GuardDuty finding structure');
+        }
 
         const severity = finding.severity || 0;
         const severityLabel = severity >= 7 ? 'HIGH' : severity >= 4 ? 'MEDIUM' : 'LOW';

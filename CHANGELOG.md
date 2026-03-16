@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.24.0] - 2026-03-16
+
+### Added
+- **WAF: New PAYLOAD_32KB constant**
+  - Added `PAYLOAD_32KB` static constant (32768 bytes) for medium API requests
+  - Enables consistent payload size configuration using constants instead of literals
+  - Can be used with `PayloadSizeConstraint()` helper method for blocking requests over 32KB
+  - Complements existing constants (PAYLOAD_8KB, PAYLOAD_64KB, PAYLOAD_256KB, PAYLOAD_1MB)
+  - Improves code readability and maintainability for payload size constraints
+
 ## [1.23.0] - 2026-03-16
 
 ### Added
