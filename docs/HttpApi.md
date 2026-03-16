@@ -151,7 +151,8 @@ By default, access logs include comprehensive audit-friendly fields:
 
 **Request Details:**
 - `httpMethod` - HTTP method (GET, POST, etc.)
-- `routeKey` - Matched route
+- `path` - Actual request path (e.g., `/api/v1/dashboard/chart/123`)
+- `routeKey` - Matched route pattern (e.g., `GET /api/v1/dashboard/{proxy+}`)
 - `protocol` - HTTP protocol version
 - `domainName` - API domain name
 

@@ -83,7 +83,7 @@ export interface AccessLogsConfig {
      * If not provided, uses an enhanced audit-friendly format including:
      * - Request identification (ID, timestamp)
      * - Client information (IP, user agent)
-     * - Request/response details (method, route, status, size)
+     * - Request/response details (method, actual path, route pattern, status, size)
      * - Performance metrics (request, integration, and response latency)
      * - Authorization data (principal ID, user ID from JWT claims)
      * - Error tracking (error messages and integration errors)
@@ -295,6 +295,7 @@ export class HttpApi extends Construct {
 
                     // Request details
                     httpMethod: '$context.httpMethod',
+                    path: '$context.path',
                     routeKey: '$context.routeKey',
                     protocol: '$context.protocol',
                     domainName: '$context.domainName',
