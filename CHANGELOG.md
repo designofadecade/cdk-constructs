@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.24.1] - 2026-03-16
+
+### Fixed
+- **Monitoring: Improved CloudWatch alarm notification parsing**
+  - Fixed "Unknown Alarm" and "No reason provided" appearing in alarm notifications
+  - Added fallback to extract alarm name from SNS Subject field when AlarmName is missing
+  - Added debug logging to help diagnose message parsing issues
+  - Improved handling of CloudWatch alarms sent through SNS with non-standard JSON structure
+  - Subject line parsing now extracts alarm name from formats like "ALARM: MyAlarmName in us-east-1"
+
 ## [1.24.0] - 2026-03-16
 
 ### Added

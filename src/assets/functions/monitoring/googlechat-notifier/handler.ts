@@ -132,10 +132,16 @@ export const handler = async (event: SNSEvent): Promise<{ statusCode: number; bo
     const body = message.Message;
     const region = process.env.AWS_REGION || 'us-east-1';
 
+    // Log the raw message for debugging
+    console.log('SNS Subject:', message.Subject);
+    console.log('SNS Message Body:', body);
+
     let parsedBody: CloudWatchAlarmMessage | ErrorLogMessage | EventBridgeMessage;
     try {
         parsedBody = JSON.parse(body);
+        console.log('Parsed message:', JSON.stringify(parsedBody, null, 2));
     } catch (e) {
+        console.log('Failed to parse message as JSON, treating as plain text');
         parsedBody = { AlarmName: body };
     }
 
@@ -346,7 +352,16 @@ export const handler = async (event: SNSEvent): Promise<{ statusCode: number; bo
     } else {
         // Handle CloudWatch Alarm messages
         const alarm = parsedBody as CloudWatchAlarmMessage;
-        const alarmName = alarm.AlarmName || 'Unknown Alarm';
+        // Use Subject as fallback for alarm name (Subject often contains "ALARM: <AlarmName> in <Region>")
+        const messageSubject = message.Subject || '';
+        let alarmName = alarm.AlarmName || 'Unknown Alarm';
+        if (alarmName === 'Unknown Alarm' && messageSubject && messageSubject.includes('ALARM:')) {
+            // Extract alarm name from subject like "ALARM: MyAlarmName in us-east-1"
+            const match = messageSubject.match(/ALARM:\s*(.+?)(?:\s+in\s+|$)/);
+            if (match && match[1]) {
+                alarmName = match[1].trim();
+            }
+        }
         const newState = alarm.NewStateValue || 'ALARM';
         const reason = alarm.NewStateReason || 'No reason provided';
         const timestamp = alarm.StateChangeTime || new Date().toISOString();
