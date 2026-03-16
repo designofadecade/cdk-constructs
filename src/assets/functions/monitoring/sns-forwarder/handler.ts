@@ -17,7 +17,7 @@ export const handler = async (event: SNSEvent): Promise<{ statusCode: number; bo
 
     // Create SNS client for the target region
     const snsClient = new SNS({ region: targetRegion });
-    
+
     const results: string[] = [];
 
     for (const record of event.Records) {
