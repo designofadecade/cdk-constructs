@@ -141,6 +141,14 @@ export interface PayloadSizeConstraintConfig {
      * @default 'GT' - Greater than (block if size > maxSizeBytes)
      */
     readonly comparisonOperator?: 'GT' | 'GTE' | 'LT' | 'LTE' | 'EQ' | 'NE';
+
+    /**
+     * Oversize handling - what to do when content is larger than WAF can inspect
+     * - 'CONTINUE': Inspect what WAF can and apply the size check normally
+     * - 'MATCH': Automatically treat oversized content as a match (will be blocked)
+     * @default 'CONTINUE' - Standard inspection behavior
+     */
+    readonly oversizeHandling?: 'CONTINUE' | 'MATCH';
 }
 
 /**
@@ -382,7 +390,7 @@ export class Waf extends Construct {
                 priority: sizeConfig.priority ?? priorityCounter++,
                 statement: {
                     sizeConstraintStatement: {
-                        fieldToMatch: Waf.GetFieldToMatch(sizeConfig.component ?? 'BODY'),
+                        fieldToMatch: Waf.GetFieldToMatch(sizeConfig.component ?? 'BODY', sizeConfig.oversizeHandling ?? 'CONTINUE'),
                         comparisonOperator: sizeConfig.comparisonOperator ?? 'GT',
                         size: sizeConfig.maxSizeBytes,
                         textTransformations: [{ priority: 0, type: 'NONE' }],
@@ -694,6 +702,7 @@ export class Waf extends Construct {
      * @param maxSizeBytes - Maximum payload size in bytes
      * @param priority - Rule priority
      * @param component - Request component to check (default: BODY)
+     * @param oversizeHandling - How to handle oversized content (default: CONTINUE)
      * @returns Payload size constraint configuration
      * 
      * @example
@@ -704,6 +713,9 @@ export class Waf extends Construct {
      * // Block requests with body > 1 MB (using constant)
      * const largePayload = Waf.PayloadSizeConstraint(Waf.PAYLOAD_1MB, 3);
      * 
+     * // Block any request larger than WAF can inspect
+     * const strict = Waf.PayloadSizeConstraint(Waf.PAYLOAD_32KB, 3, 'BODY', 'MATCH');
+     * 
      * // Or use literal values
      * const custom = Waf.PayloadSizeConstraint(524288, 3); // 512 KB
      * ```
@@ -711,13 +723,15 @@ export class Waf extends Construct {
     static PayloadSizeConstraint(
         maxSizeBytes: number,
         priority: number,
-        component: 'BODY' | 'HEADER' | 'QUERY_STRING' | 'URI_PATH' = 'BODY'
+        component: 'BODY' | 'HEADER' | 'QUERY_STRING' | 'URI_PATH' = 'BODY',
+        oversizeHandling: 'CONTINUE' | 'MATCH' = 'CONTINUE'
     ): PayloadSizeConstraintConfig {
         return {
             maxSizeBytes,
             priority,
             component,
             comparisonOperator: 'GT',
+            oversizeHandling,
         };
     }
 
@@ -725,20 +739,21 @@ export class Waf extends Construct {
      * Gets the field to match for size constraint statements
      * 
      * @param component - Component type
+     * @param oversizeHandling - How to handle oversized content
      * @returns Field to match configuration
      */
-    private static GetFieldToMatch(component: string): ICfnWebACL.FieldToMatchProperty {
+    private static GetFieldToMatch(component: string, oversizeHandling: 'CONTINUE' | 'MATCH' = 'CONTINUE'): ICfnWebACL.FieldToMatchProperty {
         switch (component) {
             case 'BODY':
-                return { body: { oversizeHandling: 'CONTINUE' } };
+                return { body: { oversizeHandling } };
             case 'HEADER':
-                return { headers: { matchPattern: { all: {} }, matchScope: 'ALL', oversizeHandling: 'CONTINUE' } };
+                return { headers: { matchPattern: { all: {} }, matchScope: 'ALL', oversizeHandling } };
             case 'QUERY_STRING':
                 return { queryString: {} };
             case 'URI_PATH':
                 return { uriPath: {} };
             default:
-                return { body: { oversizeHandling: 'CONTINUE' } };
+                return { body: { oversizeHandling } };
         }
     }
 }
