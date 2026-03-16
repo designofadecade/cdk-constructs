@@ -112,6 +112,38 @@ export interface GeoBlockConfig {
 }
 
 /**
+ * Payload size constraint configuration
+ */
+export interface PayloadSizeConstraintConfig {
+    /**
+     * Maximum payload size in bytes
+     * Common values:
+     * - 8192 (8 KB) - Small API requests
+     * - 65536 (64 KB) - Standard requests
+     * - 262144 (256 KB) - Large requests
+     * - 1048576 (1 MB) - Very large requests
+     */
+    readonly maxSizeBytes: number;
+
+    /**
+     * Rule priority
+     */
+    readonly priority: number;
+
+    /**
+     * Request component to check
+     * @default 'BODY' - Check request body size
+     */
+    readonly component?: 'BODY' | 'HEADER' | 'QUERY_STRING' | 'URI_PATH';
+
+    /**
+     * Comparison operator
+     * @default 'GT' - Greater than (block if size > maxSizeBytes)
+     */
+    readonly comparisonOperator?: 'GT' | 'GTE' | 'LT' | 'LTE' | 'EQ' | 'NE';
+}
+
+/**
  * Properties for configuring WAF Web ACL
  */
 export interface WafProps {
@@ -172,6 +204,12 @@ export interface WafProps {
      * Geographic blocking configuration
      */
     readonly geoBlock?: GeoBlockConfig;
+
+    /**
+     * Payload size constraint configuration
+     * Blocks requests that exceed the specified size limit
+     */
+    readonly payloadSizeConstraint?: PayloadSizeConstraintConfig;
 }
 
 /**
@@ -180,6 +218,7 @@ export interface WafProps {
  * Features:
  * - AWS Managed Rules (Core Rule Set, Known Bad Inputs, SQL Injection, etc.)
  * - Rate limiting protection
+ * - Payload size constraints (block oversized requests)
  * - IP allowlist/blocklist support
  * - Geographic blocking
  * - CloudFront association
@@ -196,11 +235,21 @@ export interface WafProps {
  *     limit: 2000,
  *     priority: 1,
  *   },
- *   geoBlock: {
- *     countryCodes: ['CN', 'RU'],
+ *   payloadSizeConstraint: {
+ *     maxSizeBytes: 65536, // 64 KB
  *     priority: 2,
  *   },
+ *   geoBlock: {
+ *     countryCodes: ['CN', 'RU'],
+ *     priority: 3,
+ *   },
  *   distribution: myCloudFrontDistribution,
+ *   stack: { id: 'my-app', tags: [] },
+ * });
+ * 
+ * // Using static payload size constants
+ * const waf2 = new Waf(this, 'WAF2', {
+ *   payloadSizeConstraint: Waf.PayloadSizeConstraint(Waf.PAYLOAD_1MB, 2),
  *   stack: { id: 'my-app', tags: [] },
  * });
  * 
@@ -235,6 +284,26 @@ export class Waf extends Construct {
      * Body size inspection limit: 64 KB (maximum, recommended for enhanced security)
      */
     static readonly BODY_SIZE_64KB: BodySizeInspectionLimit = 'KB_64';
+
+    /**
+     * Payload size: 8 KB (8192 bytes) - Small API requests
+     */
+    static readonly PAYLOAD_8KB: number = 8192;
+
+    /**
+     * Payload size: 64 KB (65536 bytes) - Standard requests
+     */
+    static readonly PAYLOAD_64KB: number = 65536;
+
+    /**
+     * Payload size: 256 KB (262144 bytes) - Large requests
+     */
+    static readonly PAYLOAD_256KB: number = 262144;
+
+    /**
+     * Payload size: 1 MB (1048576 bytes) - Very large requests
+     */
+    static readonly PAYLOAD_1MB: number = 1048576;
 
     #webAcl: CfnWebACL;
     #scope: 'CLOUDFRONT' | 'REGIONAL';
@@ -298,6 +367,30 @@ export class Waf extends Construct {
                 },
             });
             priorityCounter = Math.max(priorityCounter, props.geoBlock.priority + 1);
+        }
+
+        // Add payload size constraint rule
+        if (props.payloadSizeConstraint) {
+            const sizeConfig = props.payloadSizeConstraint;
+            rules.push({
+                name: 'PayloadSizeConstraintRule',
+                priority: sizeConfig.priority ?? priorityCounter++,
+                statement: {
+                    sizeConstraintStatement: {
+                        fieldToMatch: Waf.GetFieldToMatch(sizeConfig.component ?? 'BODY'),
+                        comparisonOperator: sizeConfig.comparisonOperator ?? 'GT',
+                        size: sizeConfig.maxSizeBytes,
+                        textTransformations: [{ priority: 0, type: 'NONE' }],
+                    },
+                },
+                action: { block: {} },
+                visibilityConfig: {
+                    sampledRequestsEnabled: true,
+                    cloudWatchMetricsEnabled: true,
+                    metricName: 'PayloadSizeConstraintRule',
+                },
+            });
+            priorityCounter = Math.max(priorityCounter, sizeConfig.priority + 1);
         }
 
         // Add IP sets rules
@@ -588,5 +681,59 @@ export class Waf extends Construct {
             action: 'ALLOW',
             ipAddressVersion: 'IPV4',
         };
+    }
+
+    /**
+     * Creates a payload size constraint configuration
+     * 
+     * @param maxSizeBytes - Maximum payload size in bytes
+     * @param priority - Rule priority
+     * @param component - Request component to check (default: BODY)
+     * @returns Payload size constraint configuration
+     * 
+     * @example
+     * ```typescript
+     * // Block requests with body > 64 KB (using constant)
+     * const sizeConstraint = Waf.PayloadSizeConstraint(Waf.PAYLOAD_64KB, 3);
+     * 
+     * // Block requests with body > 1 MB (using constant)
+     * const largePayload = Waf.PayloadSizeConstraint(Waf.PAYLOAD_1MB, 3);
+     * 
+     * // Or use literal values
+     * const custom = Waf.PayloadSizeConstraint(524288, 3); // 512 KB
+     * ```
+     */
+    static PayloadSizeConstraint(
+        maxSizeBytes: number,
+        priority: number,
+        component: 'BODY' | 'HEADER' | 'QUERY_STRING' | 'URI_PATH' = 'BODY'
+    ): PayloadSizeConstraintConfig {
+        return {
+            maxSizeBytes,
+            priority,
+            component,
+            comparisonOperator: 'GT',
+        };
+    }
+
+    /**
+     * Gets the field to match for size constraint statements
+     * 
+     * @param component - Component type
+     * @returns Field to match configuration
+     */
+    private static GetFieldToMatch(component: string): ICfnWebACL.FieldToMatchProperty {
+        switch (component) {
+            case 'BODY':
+                return { body: { oversizeHandling: 'CONTINUE' } };
+            case 'HEADER':
+                return { headers: { matchPattern: { all: {} }, matchScope: 'ALL', oversizeHandling: 'CONTINUE' } };
+            case 'QUERY_STRING':
+                return { queryString: {} };
+            case 'URI_PATH':
+                return { uriPath: {} };
+            default:
+                return { body: { oversizeHandling: 'CONTINUE' } };
+        }
     }
 }

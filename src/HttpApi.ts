@@ -80,7 +80,13 @@ export interface AccessLogsConfig {
 
     /**
      * Optional custom log format.
-     * If not provided, uses the default format with common fields.
+     * If not provided, uses an enhanced audit-friendly format including:
+     * - Request identification (ID, timestamp)
+     * - Client information (IP, user agent)
+     * - Request/response details (method, route, status, size)
+     * - Performance metrics (request, integration, and response latency)
+     * - Authorization data (principal ID, user ID from JWT claims)
+     * - Error tracking (error messages and integration errors)
      */
     readonly format?: string;
 }
@@ -177,7 +183,7 @@ export interface CreateAuthorizerFunctionProps {
  * // API with access logs to CloudWatch
  * const apiWithLogs = new HttpApi(this, 'ApiWithLogs', {
  *   name: 'my-api',
- *   accessLogs: true,
+ *   accessLogs: true, // Uses enhanced audit-friendly logging format
  *   stack: { id: 'my-app', tags: [] },
  * });
  * 
@@ -278,14 +284,37 @@ export class HttpApi extends Construct {
             const defaultStage = this.#httpApi.defaultStage?.node.defaultChild as any;
             if (defaultStage) {
                 const logFormat = logsConfig.format ?? JSON.stringify({
+                    // Request identification
                     requestId: '$context.requestId',
-                    ip: '$context.identity.sourceIp',
                     requestTime: '$context.requestTime',
+                    requestTimeEpoch: '$context.requestTimeEpoch',
+
+                    // Client information
+                    ip: '$context.identity.sourceIp',
+                    userAgent: '$context.identity.userAgent',
+
+                    // Request details
                     httpMethod: '$context.httpMethod',
                     routeKey: '$context.routeKey',
-                    status: '$context.status',
                     protocol: '$context.protocol',
+                    domainName: '$context.domainName',
+
+                    // Response details
+                    status: '$context.status',
                     responseLength: '$context.responseLength',
+
+                    // Performance metrics
+                    integrationLatency: '$context.integrationLatency',
+                    responseLatency: '$context.responseLatency',
+
+                    // Authorization & Security (populated if authorizer is used)
+                    principalId: '$context.authorizer.principalId',
+                    userId: '$context.authorizer.claims.sub',
+
+                    // Error tracking
+                    errorMessage: '$context.error.message',
+                    errorType: '$context.error.messageString',
+                    integrationError: '$context.integrationErrorMessage',
                 });
 
                 defaultStage.accessLogSettings = {

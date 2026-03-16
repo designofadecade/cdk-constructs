@@ -6,6 +6,7 @@ AWS WAF (Web Application Firewall) construct with best practice security rules f
 
 - **AWS Managed Rules**: Pre-configured rule sets from AWS
 - **64 KB Body Inspection**: Increased inspection limit (from default 16 KB) to detect threats in larger payloads while automatically blocking oversized requests
+- **Payload Size Constraints**: Block requests exceeding specific size limits (prevents denial-of-service attacks with oversized payloads)
 - **Rate Limiting**: Prevents DDoS and brute force attacks
 - **Geographic Blocking**: Block traffic from specific countries
 - **IP Allow/Block Lists**: Control access by IP address
@@ -74,6 +75,44 @@ const waf = new Waf(this, 'WAF', {
 });
 ```
 
+### WAF with Payload Size Constraints
+
+Block requests with payloads exceeding a specific size to prevent denial-of-service attacks:
+
+```typescript
+// Using static constants (recommended)
+const waf = new Waf(this, 'WAF', {
+  enableManagedRules: true,
+  payloadSizeConstraint: {
+    maxSizeBytes: Waf.PAYLOAD_64KB,
+    priority: 3,
+    component: 'BODY', // Check request body size
+  },
+  stack: { id: 'my-app', tags: [] },
+});
+
+// Using the helper method with constants
+const waf2 = new Waf(this, 'WAF2', {
+  payloadSizeConstraint: Waf.PayloadSizeConstraint(Waf.PAYLOAD_1MB, 3),
+  stack: { id: 'my-app', tags: [] },
+});
+
+// Or use literal byte values
+const waf3 = new Waf(this, 'WAF3', {
+  payloadSizeConstraint: {
+    maxSizeBytes: 524288, // 512 KB custom size
+    priority: 3,
+  },
+  stack: { id: 'my-app', tags: [] },
+});
+```
+
+**Static payload size constants:**
+- `Waf.PAYLOAD_8KB` - 8,192 bytes (small API requests)
+- `Waf.PAYLOAD_64KB` - 65,536 bytes (standard requests)
+- `Waf.PAYLOAD_256KB` - 262,144 bytes (large requests)  
+- `Waf.PAYLOAD_1MB` - 1,048,576 bytes (very large requests)
+
 ## Advanced Usage
 
 ### Complete Security Configuration
@@ -99,12 +138,18 @@ const waf = new Waf(this, 'WAF', {
     priority: 2,
   },
   
+  // Block oversized payloads
+  payloadSizeConstraint: {
+    maxSizeBytes: Waf.PAYLOAD_256KB,
+    priority: 3,
+  },
+  
   // IP allowlist for trusted sources
   ipSets: [
     {
       name: 'TrustedIPs',
       addresses: ['203.0.113.0/24', '198.51.100.0/24'],
-      priority: 3,
+      priority: 4,
       action: 'ALLOW',
       ipAddressVersion: 'IPV4',
     },
@@ -248,6 +293,40 @@ const waf = new Waf(this, 'WAF', {
 });
 ```
 
+### Payload Size Constants
+
+```typescript
+Waf.PAYLOAD_8KB    // 8,192 bytes
+Waf.PAYLOAD_64KB   // 65,536 bytes
+Waf.PAYLOAD_256KB  // 262,144 bytes
+Waf.PAYLOAD_1MB    // 1,048,576 bytes
+
+// Usage
+const waf = new Waf(this, 'WAF', {
+  payloadSizeConstraint: {
+    maxSizeBytes: Waf.PAYLOAD_256KB,
+    priority: 3,
+  },
+  stack: { id: 'my-app', tags: [] },
+});
+```
+
+### Body Size Inspection Limit Constants
+
+```typescript
+Waf.BODY_SIZE_16KB  // 'KB_16'
+Waf.BODY_SIZE_32KB  // 'KB_32'
+Waf.BODY_SIZE_48KB  // 'KB_48'
+Waf.BODY_SIZE_64KB  // 'KB_64'
+
+// Usage
+const waf = new Waf(this, 'WAF', {
+  enableManagedRules: true,
+  managedRulesBodySizeLimit: Waf.BODY_SIZE_64KB,
+  stack: { id: 'my-app', tags: [] },
+});
+```
+
 ## Static Helper Methods
 
 ### Scope from Region
@@ -286,6 +365,22 @@ const ipAllow = Waf.AllowIPSet('TrustedIPs', [
 ], 3);
 ```
 
+### Payload Size Constraint
+
+```typescript
+// Block requests with body > 64 KB (using constant)
+const sizeConstraint = Waf.PayloadSizeConstraint(Waf.PAYLOAD_64KB, 3);
+
+// Block requests with body > 1 MB (using constant)
+const largePayload = Waf.PayloadSizeConstraint(Waf.PAYLOAD_1MB, 3);
+
+// Block requests with body > 256 KB, check body (default)
+const constraint = Waf.PayloadSizeConstraint(Waf.PAYLOAD_256KB, 3, 'BODY');
+
+// Or use literal values for custom sizes
+const custom = Waf.PayloadSizeConstraint(524288, 3); // 512 KB
+```
+
 ## Properties Reference
 
 ### WafProps
@@ -302,6 +397,7 @@ const ipAllow = Waf.AllowIPSet('TrustedIPs', [
 | `rateLimit` | `RateLimitConfig` | No | Rate limiting configuration |
 | `ipSets` | `IPSetConfig[]` | No | IP allow/block lists |
 | `geoBlock` | `GeoBlockConfig` | No | Geographic blocking |
+| `payloadSizeConstraint` | `PayloadSizeConstraintConfig` | No | Payload size constraint |
 
 ### ManagedRuleConfig
 
@@ -318,6 +414,23 @@ const ipAllow = Waf.AllowIPSet('TrustedIPs', [
 Type: `'KB_16' | 'KB_32' | 'KB_48' | 'KB_64'`
 
 Controls the maximum request body size that will be inspected by WAF rules. Requests with bodies exceeding this limit are automatically blocked to prevent bypass attacks.
+
+### PayloadSizeConstraintConfig
+
+Configures a custom rule to block requests exceeding a specific payload size.
+
+| Property | Type | Required | Default | Description |
+|----------|------|----------|---------|-------------|
+| `maxSizeBytes` | `number` | Yes | - | Maximum payload size in bytes |
+| `priority` | `number` | Yes | - | Rule priority |
+| `component` | `'BODY' \| 'HEADER' \| 'QUERY_STRING' \| 'URI_PATH'` | No | `'BODY'` | Request component to check |
+| `comparisonOperator` | `'GT' \| 'GTE' \| 'LT' \| 'LTE' \| 'EQ' \| 'NE'` | No | `'GT'` | Comparison operator |
+
+**Common Size Values:**
+- 8 KB: `8192` or `Waf.PAYLOAD_8KB`
+- 64 KB: `65536` or `Waf.PAYLOAD_64KB`
+- 256 KB: `262144` or `Waf.PAYLOAD_256KB`
+- 1 MB: `1048576` or `Waf.PAYLOAD_1MB`
 
 ## Important Notes
 

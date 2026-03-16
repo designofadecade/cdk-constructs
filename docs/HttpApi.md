@@ -136,11 +136,47 @@ const api = new HttpApi(this, 'Api', {
 });
 ```
 
+### Default Log Format (Enhanced for Audit)
+
+By default, access logs include comprehensive audit-friendly fields:
+
+**Request Identification:**
+- `requestId` - Unique request identifier
+- `requestTime` - Human-readable timestamp
+- `requestTimeEpoch` - Unix timestamp
+
+**Client Information:**
+- `ip` - Source IP address
+- `userAgent` - Client user agent string
+
+**Request Details:**
+- `httpMethod` - HTTP method (GET, POST, etc.)
+- `routeKey` - Matched route
+- `protocol` - HTTP protocol version
+- `domainName` - API domain name
+
+**Response Details:**
+- `status` - HTTP status code
+- `responseLength` - Response size in bytes
+
+**Performance Metrics:**
+- `integrationLatency` - Backend processing time (ms)
+- `responseLatency` - Total response time (ms)
+
+**Authorization & Security:**
+- `principalId` - Authenticated principal (from authorizer)
+- `userId` - User ID from JWT claims (sub claim)
+
+**Error Tracking:**
+- `errorMessage` - Error message if request failed
+- `errorType` - Error type/category
+- `integrationError` - Backend integration errors
+
+These fields provide comprehensive audit trails for compliance, security monitoring, and debugging.
+
 ### Custom Log Format
 
-By default, logs include: Request ID, Source IP, Request Time, HTTP Method, Route Key, Response Status, Protocol, and Response Length.
-
-You can customize the format:
+You can override the default format with a custom one:
 
 ```typescript
 const api = new HttpApi(this, 'Api', {
@@ -337,11 +373,14 @@ const authorizer = HttpApi.createAuthorizerFunction(
 1. **Use HTTP API** over REST API for lower cost and latency (up to 71% cheaper)
 2. **Enable CORS** only for required origins in production
 3. **Use Lambda authorizers** for custom authentication logic with caching
-4. **Enable access logging** for monitoring and debugging
-5. **Set appropriate log retention** to balance cost and compliance needs
-6. **Export logs to S3** for long-term storage and analytics
-7. **Use path parameters** for RESTful resource identifiers (e.g., `/users/{id}`)
-8. **Group related routes** to the same Lambda function for efficiency
+4. **Enable access logging** for monitoring, debugging, and audit compliance
+5. **Use default log format** for comprehensive audit trails (includes user identity, performance metrics, and errors)
+6. **Set appropriate log retention** to balance cost and compliance needs (consider 13+ months for audit requirements)
+7. **Export logs to S3** for long-term storage and analytics
+8. **Use CloudWatch Insights** to query logs for security analysis and performance monitoring
+9. **Monitor authorization failures** using the `principalId` and error fields
+10. **Use path parameters** for RESTful resource identifiers (e.g., `/users/{id}`)
+11. **Group related routes** to the same Lambda function for efficiency
 
 ## Related Constructs
 

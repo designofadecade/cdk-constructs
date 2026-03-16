@@ -7,7 +7,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.22.0] - 2026-03-16
+
 ### Added
+- **HttpApi: Enhanced audit logging**
+  - Default log format now includes comprehensive audit-friendly fields for compliance and security
+  - Added user identity fields: `principalId` (authenticated principal), `userId` (JWT sub claim)
+  - Added client information: `userAgent` (client application details)
+  - Added performance metrics: `integrationLatency`, `responseLatency`, `requestTimeEpoch`
+  - Added security fields: `domainName` for multi-domain tracking
+  - Added error tracking: `errorMessage`, `errorType`, `integrationError`
+  - Authorization fields automatically populated when using Lambda authorizers
+  - Updated JSDoc documentation for `AccessLogsConfig.format` property
+  - Provides complete audit trail: who (userId, principalId, IP) did what (method, route) when (timestamps) and what happened (status, errors, latency)
+
+- **WAF: Payload size constraint rules**
+  - New `PayloadSizeConstraintConfig` interface for blocking oversized requests
+  - New `payloadSizeConstraint` property in `WafProps` to configure size limits
+  - Supports checking BODY, HEADER, QUERY_STRING, or URI_PATH components
+  - Configurable comparison operators (GT, GTE, LT, LTE, EQ, NE)
+  - Default behavior: blocks requests with body size greater than configured limit
+  - Static payload size constants for common limits:
+    - `Waf.PAYLOAD_8KB` - 8,192 bytes (small API requests)
+    - `Waf.PAYLOAD_64KB` - 65,536 bytes (standard requests)
+    - `Waf.PAYLOAD_256KB` - 262,144 bytes (large requests)
+    - `Waf.PAYLOAD_1MB` - 1,048,576 bytes (very large requests)
+  - New static helper method `Waf.PayloadSizeConstraint(maxSizeBytes, priority, component?)`
+  - Prevents denial-of-service attacks with oversized payloads
+  - CloudWatch metrics enabled for monitoring blocked requests
+  - Exported `PayloadSizeConstraintConfig` type in main index
+
+### Changed
+- **HttpApi: Access logs documentation**
+  - Updated property documentation to reflect enhanced audit logging format
+  - Added detailed breakdown of all logged fields by category
+  - Updated examples in JSDoc to highlight audit-friendly logging
+
+- **WAF: Documentation updates**
+  - Updated feature list to include payload size constraints
+  - Added comprehensive examples for payload size constraint usage
+  - Updated static constants documentation with payload size constants
+  - Added best practices for choosing appropriate payload size limits
+
+## [1.21.0] - 2026-03-16
 - **HttpApi: Enhanced access logs configuration**
   - Support for custom CloudWatch Log Groups (by object or by name reference)
   - Support for custom log group names when auto-creating a new log group
