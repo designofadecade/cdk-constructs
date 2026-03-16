@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.20.1] - 2026-03-16
+
+### Added
+- **Cognito: Systems Manager Parameter Store support for origin secret**
+  - HTTP API authorization function now supports retrieving origin secret from AWS Systems Manager Parameter Store
+  - New `ORIGIN_SECRET_PARAMETER_ARN` environment variable for secure secret storage
+  - Implements caching to avoid repeated SSM calls and improve Lambda performance
+  - Backward compatible with existing `ORIGIN_SECRET` environment variable
+  - Follows the same pattern as other monitoring functions for consistency
+  - Use `ParameterStore` construct to create the parameter and grant read access to the authorizer function
+
 ## [1.20.0] - 2026-03-16
 
 ### Added
