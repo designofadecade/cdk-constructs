@@ -2,13 +2,14 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import type { SNSEvent } from 'aws-lambda';
 import { mockClient } from 'aws-sdk-client-mock';
 import { SNS, PublishCommand } from '@aws-sdk/client-sns';
+
+// Set environment variables BEFORE importing handler
+process.env.TARGET_TOPIC_ARN = 'arn:aws:sns:ca-central-1:123456789012:target-topic';
+process.env.TARGET_REGION = 'ca-central-1';
+
 import { handler } from './handler.js';
 
 const snsMock = mockClient(SNS);
-
-// Set environment variables before importing handler
-process.env.TARGET_TOPIC_ARN = 'arn:aws:sns:ca-central-1:123456789012:target-topic';
-process.env.TARGET_REGION = 'ca-central-1';
 
 describe('SNS Forwarder Handler', () => {
     beforeEach(() => {
