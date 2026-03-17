@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Cognito: SMS MFA support**
+  - New `sms` configuration option for SMS-based multi-factor authentication
+  - Added `SmsConfig` interface with `smsRole` and `externalId` properties
+  - Auto-creates IAM role with SNS publish permissions when SMS is configured without a role
+  - New `Cognito.createSmsRole()` static helper method to create SMS IAM role
+  - SMS MFA automatically enabled when `sms` config is provided
+  - SMS MFA gracefully disabled when requested but `sms` config is missing
+  - Enhanced documentation with SMS MFA configuration examples
+  - Comprehensive test coverage for SMS MFA functionality
+
 ## [1.25.1] - 2026-03-16
 
 ### Added

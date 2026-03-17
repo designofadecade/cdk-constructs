@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { App, Stack, Duration, RemovalPolicy } from 'aws-cdk-lib';
 import { Template, Match } from 'aws-cdk-lib/assertions';
 import { RetentionDays } from 'aws-cdk-lib/aws-logs';
+import { Role, ServicePrincipal, PolicyStatement } from 'aws-cdk-lib/aws-iam';
 import { Cognito, PasswordPolicyPlan } from '../src/Cognito.js';
 
 describe('Cognito', () => {
@@ -111,6 +112,139 @@ describe('Cognito', () => {
         template.hasResourceProperties('AWS::Cognito::UserPool', {
             MfaConfiguration: 'ON',
             EnabledMfas: ['SOFTWARE_TOKEN_MFA', 'EMAIL_OTP'],
+        });
+    });
+
+    it('configures SMS MFA', () => {
+        const app = new App();
+        const stack = new Stack(app, 'TestStack');
+
+        const smsRole = new Role(stack, 'SmsRole', {
+            assumedBy: new ServicePrincipal('cognito-idp.amazonaws.com'),
+        });
+        smsRole.addToPolicy(new PolicyStatement({
+            actions: ['sns:Publish'],
+            resources: ['*'],
+        }));
+
+        new Cognito(stack, 'TestCognito', {
+            mfa: { required: true, mfaSecondFactor: { sms: true, otp: true } },
+            sms: {
+                smsRole,
+                externalId: 'test-external-id',
+            },
+            stack: { id: 'test', label: 'Test', tags: [] },
+        });
+
+        const template = Template.fromStack(stack);
+        template.hasResourceProperties('AWS::Cognito::UserPool', {
+            MfaConfiguration: 'ON',
+            EnabledMfas: ['SMS_MFA', 'SOFTWARE_TOKEN_MFA'],
+            SmsConfiguration: {
+                SnsCallerArn: stack.resolve(smsRole.roleArn),
+                ExternalId: 'test-external-id',
+            },
+        });
+    });
+
+    it('auto-creates SMS role when not provided', () => {
+        const app = new App();
+        const stack = new Stack(app, 'TestStack');
+
+        new Cognito(stack, 'TestCognito', {
+            mfa: { required: true, mfaSecondFactor: { sms: true, otp: true } },
+            sms: {
+                externalId: 'test-external-id',
+            },
+            stack: { id: 'test', label: 'Test', tags: [] },
+        });
+
+        const template = Template.fromStack(stack);
+        template.hasResourceProperties('AWS::Cognito::UserPool', {
+            MfaConfiguration: 'ON',
+            EnabledMfas: ['SMS_MFA', 'SOFTWARE_TOKEN_MFA'],
+            SmsConfiguration: {
+                ExternalId: 'test-external-id',
+            },
+        });
+        // Verify the role was created
+        template.resourceCountIs('AWS::IAM::Role', 1);
+        template.hasResourceProperties('AWS::IAM::Role', {
+            AssumeRolePolicyDocument: {
+                Statement: Match.arrayWith([
+                    Match.objectLike({
+                        Principal: {
+                            Service: 'cognito-idp.amazonaws.com',
+                        },
+                    }),
+                ]),
+            },
+        });
+    });
+
+    it('creates SMS role using helper method', () => {
+        const app = new App();
+        const stack = new Stack(app, 'TestStack');
+
+        const smsRole = Cognito.createSmsRole(stack, 'MySmsRole');
+
+        new Cognito(stack, 'TestCognito', {
+            mfa: true,
+            sms: { smsRole },
+            stack: { id: 'test', label: 'Test', tags: [] },
+        });
+
+        const template = Template.fromStack(stack);
+        template.resourceCountIs('AWS::IAM::Role', 1);
+        template.hasResourceProperties('AWS::IAM::Role', {
+            AssumeRolePolicyDocument: {
+                Statement: Match.arrayWith([
+                    Match.objectLike({
+                        Principal: {
+                            Service: 'cognito-idp.amazonaws.com',
+                        },
+                    }),
+                ]),
+            },
+        });
+    });
+
+    it('defaults to SMS MFA when SMS is configured', () => {
+        const app = new App();
+        const stack = new Stack(app, 'TestStack');
+
+        const smsRole = new Role(stack, 'SmsRole', {
+            assumedBy: new ServicePrincipal('cognito-idp.amazonaws.com'),
+        });
+
+        new Cognito(stack, 'TestCognito', {
+            mfa: true,
+            sms: {
+                smsRole,
+            },
+            stack: { id: 'test', label: 'Test', tags: [] },
+        });
+
+        const template = Template.fromStack(stack);
+        template.hasResourceProperties('AWS::Cognito::UserPool', {
+            MfaConfiguration: 'ON',
+            EnabledMfas: ['SMS_MFA', 'SOFTWARE_TOKEN_MFA'],
+        });
+    });
+
+    it('disables SMS MFA when SMS is not configured', () => {
+        const app = new App();
+        const stack = new Stack(app, 'TestStack');
+
+        new Cognito(stack, 'TestCognito', {
+            mfa: { required: true, mfaSecondFactor: { sms: true, otp: true } },
+            stack: { id: 'test', label: 'Test', tags: [] },
+        });
+
+        const template = Template.fromStack(stack);
+        template.hasResourceProperties('AWS::Cognito::UserPool', {
+            MfaConfiguration: 'ON',
+            EnabledMfas: ['SOFTWARE_TOKEN_MFA'],
         });
     });
 

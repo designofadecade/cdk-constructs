@@ -27,6 +27,7 @@ import {
     type ICustomAttribute,
 } from 'aws-cdk-lib/aws-cognito';
 import * as logs from 'aws-cdk-lib/aws-logs';
+import { Role, ServicePrincipal, PolicyStatement, type IRole } from 'aws-cdk-lib/aws-iam';
 import type { ICertificate } from 'aws-cdk-lib/aws-certificatemanager';
 import { RecordTarget, ARecord, type IHostedZone } from 'aws-cdk-lib/aws-route53';
 import { UserPoolDomainTarget } from 'aws-cdk-lib/aws-route53-targets';
@@ -305,6 +306,25 @@ export interface SesEmailConfig {
      * The verified SES domain
      */
     readonly verifiedDomain: string;
+}
+
+/**
+ * SMS configuration for Cognito
+ */
+export interface SmsConfig {
+    /**
+     * IAM role that allows Cognito to send SMS messages via SNS
+     * If not provided, a role will be automatically created with SNS publish permissions
+     * @default - automatically creates a role with SNS publish permissions
+     */
+    readonly smsRole?: IRole;
+
+    /**
+     * External ID for enhanced security when assuming the SMS role
+     * Recommended for production environments
+     * @default - no external ID
+     */
+    readonly externalId?: string;
 }
 
 /**
@@ -632,6 +652,12 @@ export interface CognitoProps {
     readonly sesEmail?: SesEmailConfig;
 
     /**
+     * Optional SMS configuration for MFA and user verification
+     * Requires an IAM role with SNS publish permissions
+     */
+    readonly sms?: SmsConfig;
+
+    /**
      * Optional custom domain configuration
      */
     readonly customDomain?: CustomDomainConfig;
@@ -715,6 +741,7 @@ export interface LoadedBranding {
  * - MFA support (optional or required) with SMS, TOTP, and Email options
  * - Custom domains with Route53 integration
  * - SES email integration
+ * - SMS configuration for MFA and user verification
  * - Multiple app clients with per-client branding
  * - Prevent user existence errors for enhanced security
  * - Custom attributes
@@ -726,7 +753,11 @@ export interface LoadedBranding {
  * const userPool = new Cognito(this, 'UserPool', {
  *   stack: { id: 'my-app', label: 'My App', tags: [] },
  *   featurePlan: Cognito.FeaturePlan.LITE,
- *   mfa: { required: true, mfaSecondFactor: { sms: false, otp: true, email: true } },
+ *   mfa: { required: true, mfaSecondFactor: { sms: true, otp: true, email: true } },
+ *   sms: {
+ *     // smsRole is optional - will be auto-created if not provided
+ *     externalId: 'my-external-id',
+ *   },
  *   customDomain: {
  *     domain: 'auth.example.com',
  *     certificate: myCertificate,
@@ -801,6 +832,9 @@ export class Cognito extends Construct {
             });
         }
 
+        // Auto-create SMS role if SMS is configured but no role is provided
+        const smsRole = props.sms?.smsRole ?? (props.sms ? Cognito.createSmsRole(this, 'SmsRole') : undefined);
+
         this.#userPool = new UserPool(this, 'UserPool', {
             userPoolName: props.stack.label,
             featurePlan: props.featurePlan ?? FeaturePlan.ESSENTIALS,
@@ -815,7 +849,7 @@ export class Cognito extends Construct {
             ...(props.mfa != null
                 ? {
                     mfa: (typeof props.mfa === 'boolean' ? props.mfa : props.mfa.required) ? Mfa.REQUIRED : Mfa.OPTIONAL,
-                    mfaSecondFactor: Cognito.getMfaSecondFactor(props.mfa, props.mfaSecondFactor, props.sesEmail),
+                    mfaSecondFactor: Cognito.getMfaSecondFactor(props.mfa, props.mfaSecondFactor, props.sesEmail, props.sms),
                 }
                 : {}),
             standardAttributes: {
@@ -834,6 +868,12 @@ export class Cognito extends Construct {
                     sesVerifiedDomain: props.sesEmail.verifiedDomain,
                 })
                 : undefined,
+            ...(props.sms
+                ? {
+                    smsRole,
+                    smsRoleExternalId: props.sms.externalId,
+                }
+                : {}),
             ...(props.threatProtection?.standardThreatProtectionMode !== undefined
                 ? { standardThreatProtectionMode: props.threatProtection.standardThreatProtectionMode }
                 : props.threatProtection?.customThreatProtectionMode !== undefined
@@ -1265,6 +1305,36 @@ export class Cognito extends Construct {
     }
 
     /**
+     * Creates an IAM role for Cognito SMS sending via SNS
+     * 
+     * @param scope - The construct scope
+     * @param id - The construct ID
+     * @returns An IAM role configured for Cognito SMS
+     * 
+     * @example
+     * ```typescript
+     * const smsRole = Cognito.createSmsRole(this, 'CognitoSmsRole');
+     * 
+     * const auth = new Cognito(this, 'Auth', {
+     *   stack: { id: 'my-app', label: 'My App', tags: [] },
+     *   sms: { smsRole },
+     * });
+     * ```
+     */
+    static createSmsRole(scope: Construct, id: string): IRole {
+        const role = new Role(scope, id, {
+            assumedBy: new ServicePrincipal('cognito-idp.amazonaws.com'),
+        });
+
+        role.addToPolicy(new PolicyStatement({
+            actions: ['sns:Publish'],
+            resources: ['*'],
+        }));
+
+        return role;
+    }
+
+    /**
      * Gets the entry path for the auth callback function
      */
     static CallbackAuthFunctionEntryPath(): string {
@@ -1431,12 +1501,14 @@ export class Cognito extends Construct {
     /**
      * Calculate MFA second factor configuration
      * Email MFA requires SES to be configured
+     * SMS MFA requires SMS configuration
      * @private
      */
     private static getMfaSecondFactor(
         mfa?: boolean | MfaConfig,
         mfaSecondFactor?: MfaSecondFactor,
         sesEmail?: SesEmailConfig,
+        smsConfig?: SmsConfig,
     ): MfaSecondFactor | undefined {
         if (mfa == null) return undefined;
 
@@ -1451,12 +1523,19 @@ export class Cognito extends Construct {
                     email: false,
                 };
             }
+            // If SMS MFA is requested but SMS is not configured, remove SMS
+            if (explicitConfig.sms && !smsConfig) {
+                return {
+                    ...explicitConfig,
+                    sms: false,
+                };
+            }
             return explicitConfig;
         }
 
         // Default configuration
         return {
-            sms: false,
+            sms: smsConfig != null, // Only enable SMS MFA if SMS is configured
             otp: true,
             email: sesEmail != null, // Only enable email MFA if SES is configured
         };

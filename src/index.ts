@@ -57,6 +57,7 @@ export type {
     MfaConfig,
     CustomDomainConfig,
     SesEmailConfig,
+    SmsConfig,
     ClientBrandingConfig,
     UserPoolClientConfig,
     LoadedBranding,

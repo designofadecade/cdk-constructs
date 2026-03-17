@@ -181,7 +181,7 @@ Your password has expired. It has been 91 days since your last password change. 
 The construct supports multiple MFA methods:
 
 ```typescript
-// Simple boolean - enables optional MFA with TOTP (and Email if SES is configured)
+// Simple boolean - enables optional MFA with TOTP (and Email/SMS if configured)
 const auth = new Cognito(this, 'Auth', {
   stack: { id: 'my-app', label: 'My App', tags: [] },
   mfa: true,
@@ -204,12 +204,79 @@ const auth = new Cognito(this, 'Auth', {
     verifiedDomain: 'example.com',
   },
 });
+
+// SMS MFA Configuration
+// Note: SMS MFA requires an IAM role with SNS publish permissions
+// The role will be auto-created if not provided
+
+// Option 1: Auto-create the SMS role (simplest)
+const auth = new Cognito(this, 'Auth', {
+  stack: { id: 'my-app', label: 'My App', tags: [] },
+  mfa: {
+    required: true,
+    mfaSecondFactor: {
+      sms: true,    // SMS MFA
+      otp: true,    // TOTP via authenticator app
+      email: false,
+    },
+  },
+  sms: {
+    externalId: 'my-external-id', // Optional: for enhanced security
+  },
+});
+
+// Option 2: Use the helper method to create the role
+const smsRole = Cognito.createSmsRole(this, 'CognitoSmsRole');
+
+const auth = new Cognito(this, 'Auth', {
+  stack: { id: 'my-app', label: 'My App', tags: [] },
+  mfa: true,
+  sms: {
+    smsRole, // Use the helper-created role
+    externalId: 'my-external-id',
+  },
+});
+
+// Option 3: Create a custom role with specific permissions
+import { Role, ServicePrincipal, PolicyStatement } from 'aws-cdk-lib/aws-iam';
+
+const smsRole = new Role(this, 'CognitoSmsRole', {
+  assumedBy: new ServicePrincipal('cognito-idp.amazonaws.com'),
+});
+
+smsRole.addToPolicy(new PolicyStatement({
+  actions: ['sns:Publish'],
+  resources: ['*'],
+}));
+
+const auth = new Cognito(this, 'Auth', {
+  stack: { id: 'my-app', label: 'My App', tags: [] },
+  mfa: {
+    required: true,
+    mfaSecondFactor: {
+      sms: true,    // SMS MFA (requires SMS configuration)
+      otp: true,    // TOTP via authenticator app
+      email: false,
+    },
+  },
+  sms: {
+    smsRole,
+    externalId: 'my-external-id', // Optional: for enhanced security
+  },
+});
 ```
 
-**Important:** Email MFA requires SES (Simple Email Service) configuration. Messages are charged separately by Amazon SES. Ensure you have:
-- SES configured in your AWS account
-- A verified domain or email address
-- Sufficient SES sending limits for your use case
+**Important Notes:**
+- **Email MFA** requires SES (Simple Email Service) configuration. Messages are charged separately by Amazon SES. Ensure you have:
+  - SES configured in your AWS account
+  - A verified domain or email address
+  - Sufficient SES sending limits for your use case
+- **SMS MFA** requires:
+  - An IAM role with SNS publish permissions (auto-created if not provided)
+  - The role must trust `cognito-idp.amazonaws.com` (automatically configured)
+  - SMS messages are charged separately by Amazon SNS
+  - Consider setting an external ID for enhanced security in production environments
+  - Use `Cognito.createSmsRole()` helper method or let the construct auto-create the role
 
 ## Customizing MFA and Password Reset Emails
 
