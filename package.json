@@ -8,7 +8,7 @@
   "scripts": {
     "clean": "rm -rf dist",
     "build": "npm run clean && tsc -p tsconfig.build.json && npm run copy-assets",
-    "copy-assets": "cp src/assets/functions/cognito/custom-message/*.{html,txt} dist/assets/functions/cognito/custom-message/ && find src/assets/functions/monitoring -name 'package.json' -exec sh -c 'cp \"$1\" \"dist/assets/functions/monitoring/$(basename $(dirname \"$1\"))/\"' _ {} \\;",
+    "copy-assets": "cp src/assets/functions/cognito/custom-message/*.html dist/assets/functions/cognito/custom-message/ && cp src/assets/functions/cognito/custom-message/*.txt dist/assets/functions/cognito/custom-message/ && find src/assets/functions/monitoring -name 'package.json' -exec sh -c 'cp \"$1\" \"dist/assets/functions/monitoring/$(basename $(dirname \"$1\"))/\"' _ {} \\;",
     "watch": "tsc --watch",
     "test": "vitest run",
     "test:watch": "vitest",
