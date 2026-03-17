@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Improved
+- **Cognito: Custom message handler diagnostic logging**
+  - Added logging for trigger source identification and processing
+  - Logs trigger invocation details (triggerSource, userPoolId, userName)
+  - Logs signup verification message customization details
+  - Helps troubleshoot custom message Lambda configuration issues
+
 ## [1.27.2] - 2026-03-17
 
 ### Added

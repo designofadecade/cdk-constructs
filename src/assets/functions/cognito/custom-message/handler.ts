@@ -32,6 +32,12 @@ const defaultSignupSubject = 'Verify Your Account';
  */
 export const handler: CustomMessageTriggerHandler = async (event: CustomMessageTriggerEvent): Promise<CustomMessageTriggerEvent> => {
     try {
+        console.log('Custom message trigger invoked:', {
+            triggerSource: event?.triggerSource,
+            userPoolId: event?.userPoolId,
+            userName: event?.userName,
+        });
+
         const code = event?.request?.codeParameter;
 
         if (!code) {
@@ -71,6 +77,7 @@ export const handler: CustomMessageTriggerHandler = async (event: CustomMessageT
 
         // Handle Sign Up Verification
         if (event?.triggerSource === 'CustomMessage_SignUp') {
+            console.log('Processing signup verification message');
             const subject = process.env.COGNITO_SIGNUP_SUBJECT || defaultSignupSubject;
             const htmlMessage = signupTemplateHtml
                 .replaceAll('{code}', code)
@@ -81,6 +88,12 @@ export const handler: CustomMessageTriggerHandler = async (event: CustomMessageT
             event.response.emailSubject = subject;
             event.response.emailMessage = htmlMessage;
             event.response.smsMessage = smsMessage;
+
+            console.log('Signup verification message customized:', {
+                subject,
+                hasHtmlMessage: !!htmlMessage,
+                hasSmsMessage: !!smsMessage,
+            });
         }
 
         return event;
