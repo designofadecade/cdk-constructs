@@ -40,7 +40,6 @@ export const handler: CustomMessageTriggerHandler = async (event: CustomMessageT
         const code = event?.request?.codeParameter;
 
         if (!code) {
-            console.error('Missing codeParameter in event');
             throw new Error('Code parameter not found');
         }
 
@@ -76,7 +75,6 @@ export const handler: CustomMessageTriggerHandler = async (event: CustomMessageT
 
         // Handle Sign Up Verification
         if (event?.triggerSource === 'CustomMessage_SignUp') {
-            console.log('Processing signup verification message');
             const subject = process.env.COGNITO_SIGNUP_SUBJECT || defaultSignupSubject;
             const htmlMessage = signupTemplateHtml
                 .replaceAll('{code}', code)
@@ -87,17 +85,10 @@ export const handler: CustomMessageTriggerHandler = async (event: CustomMessageT
             event.response.emailSubject = subject;
             event.response.emailMessage = htmlMessage;
             event.response.smsMessage = smsMessage;
-
-            console.log('Signup verification message customized:', {
-                subject,
-                hasHtmlMessage: !!htmlMessage,
-                hasSmsMessage: !!smsMessage,
-            });
         }
 
         // Handle Verify User Attribute (email/phone verification)
         if (event?.triggerSource === 'CustomMessage_VerifyUserAttribute') {
-            console.log('Processing user attribute verification message');
             const subject = process.env.COGNITO_VERIFY_ATTRIBUTE_SUBJECT || defaultVerifyAttributeSubject;
             const htmlMessage = verifyAttributeTemplateHtml
                 .replaceAll('{code}', code)
@@ -109,16 +100,10 @@ export const handler: CustomMessageTriggerHandler = async (event: CustomMessageT
             event.response.emailMessage = htmlMessage;
             event.response.smsMessage = smsMessage;
 
-            console.log('User attribute verification message customized:', {
-                subject,
-                hasHtmlMessage: !!htmlMessage,
-                hasSmsMessage: !!smsMessage,
-            });
         }
 
         return event;
     } catch (error) {
-        console.error('Error in custom message trigger:', error);
         throw error;
     }
 };

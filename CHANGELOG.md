@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+- **Cognito: Removed all console logging from custom message handler**
+  - Removed console.error for missing code parameter
+  - Removed console.log for signup verification processing
+  - Removed console.log for user attribute verification processing
+  - Removed console.error for catch block error logging
+  - Cleaner Lambda execution with reduced CloudWatch log verbosity
+
 ## [1.28.2] - 2026-03-17
 
 ### Removed
