@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+- **Cognito: Removed verbose trigger invocation logging**
+  - Removed console.log for trigger invocation details (triggerSource, userPoolId, userName)
+  - Retained specific processing logs for signup and attribute verification
+  - Reduced log verbosity while keeping useful diagnostic information
+
 ## [1.28.1] - 2026-03-17
 
 ### Added

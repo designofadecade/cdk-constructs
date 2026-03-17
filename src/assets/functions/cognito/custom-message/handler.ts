@@ -37,12 +37,6 @@ const defaultVerifyAttributeSubject = 'Verify Your Information';
  */
 export const handler: CustomMessageTriggerHandler = async (event: CustomMessageTriggerEvent): Promise<CustomMessageTriggerEvent> => {
     try {
-        console.log('Custom message trigger invoked:', {
-            triggerSource: event?.triggerSource,
-            userPoolId: event?.userPoolId,
-            userName: event?.userName,
-        });
-
         const code = event?.request?.codeParameter;
 
         if (!code) {

@@ -442,45 +442,6 @@ describe('cognito-custom-message handler', () => {
         expect(result.response.smsMessage).toBe('Your verification code is: 333444');
     });
 
-    it('logs trigger invocation details', async () => {
-        const consoleLogSpy = vi.spyOn(console, 'log');
-        const { handler } = await import('./handler.js');
-
-        const event: CustomMessageTriggerEvent = {
-            version: '1',
-            triggerSource: 'CustomMessage_SignUp',
-            region: 'us-east-1',
-            userPoolId: 'us-east-1_test123',
-            userName: 'testuser',
-            callerContext: {
-                awsSdkVersion: '1',
-                clientId: 'test-client-id',
-            },
-            request: {
-                userAttributes: {
-                    sub: '12345678-1234-1234-1234-123456789012',
-                    email: 'test@example.com',
-                },
-                codeParameter: '123456',
-                linkParameter: '',
-                usernameParameter: null,
-            },
-            response: {
-                smsMessage: null,
-                emailSubject: '',
-                emailMessage: '',
-            },
-        };
-
-        await callHandler(handler, event);
-
-        expect(consoleLogSpy).toHaveBeenCalledWith('Custom message trigger invoked:', {
-            triggerSource: 'CustomMessage_SignUp',
-            userPoolId: 'us-east-1_test123',
-            userName: 'testuser',
-        });
-    });
-
     it('logs signup verification processing', async () => {
         const consoleLogSpy = vi.spyOn(console, 'log');
         const { handler } = await import('./handler.js');
