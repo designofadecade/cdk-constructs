@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.27.3] - 2026-03-17
+
 ### Improved
 - **Cognito: Custom message handler diagnostic logging**
   - Added logging for trigger source identification and processing
