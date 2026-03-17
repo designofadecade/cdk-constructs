@@ -5,11 +5,17 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath((import.meta as any).url));
 
-// Load templates
+// Load email templates
 const forgotPasswordTemplatePath = resolve(__dirname, 'forgotpassword.html');
 const mfaTemplatePath = resolve(__dirname, 'mfa.html');
 const forgotPasswordTemplateHtml = readFileSync(forgotPasswordTemplatePath, 'utf8');
 const mfaTemplateHtml = readFileSync(mfaTemplatePath, 'utf8');
+
+// Load SMS templates
+const forgotPasswordSmsTemplatePath = resolve(__dirname, 'forgotpassword-sms.txt');
+const mfaSmsTemplatePath = resolve(__dirname, 'mfa-sms.txt');
+const forgotPasswordSmsTemplate = readFileSync(forgotPasswordSmsTemplatePath, 'utf8');
+const mfaSmsTemplate = readFileSync(mfaSmsTemplatePath, 'utf8');
 
 // Default subjects
 const defaultForgotPasswordSubject = 'Password Reset';
@@ -17,7 +23,7 @@ const defaultMfaSubject = 'Your Verification Code';
 
 /**
  * Lambda handler for Cognito custom message trigger
- * Customizes email messages for forgot password and MFA with HTML templates
+ * Customizes email and SMS messages for forgot password and MFA with templates
  */
 export const handler: CustomMessageTriggerHandler = async (event: CustomMessageTriggerEvent): Promise<CustomMessageTriggerEvent> => {
     try {
@@ -36,9 +42,12 @@ export const handler: CustomMessageTriggerHandler = async (event: CustomMessageT
             const htmlMessage = forgotPasswordTemplateHtml
                 .replaceAll('{code}', code)
                 .replaceAll('{year}', currentYear);
+            const smsMessage = forgotPasswordSmsTemplate
+                .replaceAll('{code}', code);
 
             event.response.emailSubject = subject;
             event.response.emailMessage = htmlMessage;
+            event.response.smsMessage = smsMessage;
         }
 
         // Handle MFA Code (sent during authentication)
@@ -47,9 +56,12 @@ export const handler: CustomMessageTriggerHandler = async (event: CustomMessageT
             const htmlMessage = mfaTemplateHtml
                 .replaceAll('{code}', code)
                 .replaceAll('{year}', currentYear);
+            const smsMessage = mfaSmsTemplate
+                .replaceAll('{code}', code);
 
             event.response.emailSubject = subject;
             event.response.emailMessage = htmlMessage;
+            event.response.smsMessage = smsMessage;
         }
 
         return event;

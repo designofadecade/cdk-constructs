@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.27.0] - 2026-03-17
+
+### Added
+- **Cognito: SMS message templates for custom message trigger**
+  - New SMS template files for forgot password and MFA flows
+  - Added `forgotpassword-sms.txt` template for password reset SMS messages
+  - Added `mfa-sms.txt` template for MFA verification SMS messages
+  - Custom message handler now sets `smsMessage` response for both trigger types
+  - SMS templates support `{code}` placeholder for verification code replacement
+  - Updated build script to copy `.txt` template files alongside `.html` files
+  - Enhanced documentation with SMS template customization guidance
+  - Added comprehensive test coverage for SMS message generation
+
 ## [1.26.1] - 2026-03-17
 
 ### Fixed

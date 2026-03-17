@@ -295,4 +295,72 @@ describe('cognito-custom-message handler', () => {
 
         await expect(callHandler(handler, event)).rejects.toThrow('Code parameter not found');
     });
+
+    it('customizes forgot password SMS message from template', async () => {
+        const { handler } = await import('./handler.js');
+
+        const event: CustomMessageTriggerEvent = {
+            version: '1',
+            triggerSource: 'CustomMessage_ForgotPassword',
+            region: 'us-east-1',
+            userPoolId: 'us-east-1_test123',
+            userName: 'testuser',
+            callerContext: {
+                awsSdkVersion: '1',
+                clientId: 'test-client-id',
+            },
+            request: {
+                userAttributes: {
+                    sub: '12345678-1234-1234-1234-123456789012',
+                    email: 'test@example.com',
+                },
+                codeParameter: '111222',
+                linkParameter: '',
+                usernameParameter: null,
+            },
+            response: {
+                smsMessage: null,
+                emailSubject: '',
+                emailMessage: '',
+            },
+        };
+
+        const result = await callHandler(handler, event);
+
+        expect(result.response.smsMessage).toBe('Your password reset code is: 111222');
+    });
+
+    it('customizes MFA SMS message from template', async () => {
+        const { handler } = await import('./handler.js');
+
+        const event: CustomMessageTriggerEvent = {
+            version: '1',
+            triggerSource: 'CustomMessage_Authentication',
+            region: 'us-east-1',
+            userPoolId: 'us-east-1_test123',
+            userName: 'testuser',
+            callerContext: {
+                awsSdkVersion: '1',
+                clientId: 'test-client-id',
+            },
+            request: {
+                userAttributes: {
+                    sub: '12345678-1234-1234-1234-123456789012',
+                    email: 'test@example.com',
+                },
+                codeParameter: '333444',
+                linkParameter: '',
+                usernameParameter: null,
+            },
+            response: {
+                smsMessage: null,
+                emailSubject: '',
+                emailMessage: '',
+            },
+        };
+
+        const result = await callHandler(handler, event);
+
+        expect(result.response.smsMessage).toBe('Your verification code is: 333444');
+    });
 });
