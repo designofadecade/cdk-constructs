@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Cognito: Dedicated templates for user attribute verification**
+  - New `verify-attribute.html` template for email/phone change verification
+  - New `verify-attribute-sms.txt` template for attribute verification SMS
+  - `COGNITO_VERIFY_ATTRIBUTE_SUBJECT` environment variable (default: "Verify Your Information")
+  - Distinct messaging for attribute changes vs. new account signup
+  - Template focuses on confirming account changes rather than welcoming new users
+
 ## [1.27.4] - 2026-03-17
 
 ### Fixed

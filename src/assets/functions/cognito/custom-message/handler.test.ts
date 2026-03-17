@@ -8,6 +8,7 @@ describe('cognito-custom-message handler', () => {
         delete process.env.COGNITO_FORGOT_PASSWORD_SUBJECT;
         delete process.env.COGNITO_MFA_SUBJECT;
         delete process.env.COGNITO_SIGNUP_SUBJECT;
+        delete process.env.COGNITO_VERIFY_ATTRIBUTE_SUBJECT;
     });
 
     // Helper to call handler with required 3-arg signature
@@ -193,10 +194,10 @@ describe('cognito-custom-message handler', () => {
 
         const result = await callHandler(handler, event);
 
-        expect(result.response.emailSubject).toBe('Verify Your Account');
+        expect(result.response.emailSubject).toBe('Verify Your Information');
         expect(result.response.emailMessage).toContain('555666');
         expect(result.response.emailMessage).toContain(String(new Date().getFullYear()));
-        expect(result.response.smsMessage).toBe('Your verification code is: 555666');
+        expect(result.response.smsMessage).toBe('Your verification code to confirm account changes is: 555666');
     });
 
     it('throws error when code parameter is missing', async () => {

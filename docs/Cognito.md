@@ -294,6 +294,7 @@ const customMessageFn = new LambdaFunction(this, 'CustomMessage', {
   environment: {
     // Optional: Customize email subjects
     COGNITO_SIGNUP_SUBJECT: 'Verify Your Account',
+    COGNITO_VERIFY_ATTRIBUTE_SUBJECT: 'Verify Your Information',
     COGNITO_FORGOT_PASSWORD_SUBJECT: 'Reset Your Password',
     COGNITO_MFA_SUBJECT: 'Your Security Code',
   },
@@ -322,7 +323,7 @@ const auth = new Cognito(this, 'Auth', {
 The custom message handler automatically styles:
 - **Signup Verification Emails** - Welcome message with account verification code
 - **Signup Verification SMS** - Concise text message with verification code
-- **User Attribute Verification** - Email and SMS for verifying user attributes (email/phone)
+- **User Attribute Verification** - Email and SMS for confirming email/phone changes
 - **Password Reset Emails** - Modern HTML template with reset code
 - **Password Reset SMS** - Concise text message with reset code
 - **MFA Emails** - Security-focused design with authentication code
@@ -342,8 +343,8 @@ SMS templates provide:
 ### Customizing Templates
 
 The function bundle includes default templates that you can modify:
-- **Email Templates**: `signup.html`, `forgotpassword.html`, and `mfa.html`
-- **SMS Templates**: `signup-sms.txt`, `forgotpassword-sms.txt`, and `mfa-sms.txt`
+- **Email Templates**: `signup.html`, `verify-attribute.html`, `forgotpassword.html`, and `mfa.html`
+- **SMS Templates**: `signup-sms.txt`, `verify-attribute-sms.txt`, `forgotpassword-sms.txt`, and `mfa-sms.txt`
 
 All templates support the `{code}` placeholder which is replaced with the actual verification code. Email templates also support `{year}` for copyright notices.
 
