@@ -322,6 +322,7 @@ const auth = new Cognito(this, 'Auth', {
 The custom message handler automatically styles:
 - **Signup Verification Emails** - Welcome message with account verification code
 - **Signup Verification SMS** - Concise text message with verification code
+- **User Attribute Verification** - Email and SMS for verifying user attributes (email/phone)
 - **Password Reset Emails** - Modern HTML template with reset code
 - **Password Reset SMS** - Concise text message with reset code
 - **MFA Emails** - Security-focused design with authentication code

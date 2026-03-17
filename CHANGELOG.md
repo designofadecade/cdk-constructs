@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Cognito: Support for VerifyUserAttribute custom message trigger**
+  - Added support for `CustomMessage_VerifyUserAttribute` trigger
+  - Uses same templates as signup verification for consistent user experience
+  - Fixes issue where user attribute verification emails showed default Cognito message
+  - Added test coverage for user attribute verification
+
 ## [1.27.3] - 2026-03-17
 
 ### Improved

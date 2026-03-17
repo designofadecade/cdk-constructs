@@ -96,6 +96,27 @@ export const handler: CustomMessageTriggerHandler = async (event: CustomMessageT
             });
         }
 
+        // Handle Verify User Attribute (email/phone verification)
+        if (event?.triggerSource === 'CustomMessage_VerifyUserAttribute') {
+            console.log('Processing user attribute verification message');
+            const subject = process.env.COGNITO_SIGNUP_SUBJECT || defaultSignupSubject;
+            const htmlMessage = signupTemplateHtml
+                .replaceAll('{code}', code)
+                .replaceAll('{year}', currentYear);
+            const smsMessage = signupSmsTemplate
+                .replaceAll('{code}', code);
+
+            event.response.emailSubject = subject;
+            event.response.emailMessage = htmlMessage;
+            event.response.smsMessage = smsMessage;
+
+            console.log('User attribute verification message customized:', {
+                subject,
+                hasHtmlMessage: !!htmlMessage,
+                hasSmsMessage: !!smsMessage,
+            });
+        }
+
         return event;
     } catch (error) {
         console.error('Error in custom message trigger:', error);

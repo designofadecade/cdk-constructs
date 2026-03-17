@@ -162,6 +162,43 @@ describe('cognito-custom-message handler', () => {
         expect(result.response.emailMessage).toContain('987654');
     });
 
+    it('customizes user attribute verification email with HTML template', async () => {
+        const { handler } = await import('./handler.js');
+
+        const event: CustomMessageTriggerEvent = {
+            version: '1',
+            triggerSource: 'CustomMessage_VerifyUserAttribute',
+            region: 'us-east-1',
+            userPoolId: 'us-east-1_test123',
+            userName: 'testuser',
+            callerContext: {
+                awsSdkVersion: '1',
+                clientId: 'test-client-id',
+            },
+            request: {
+                userAttributes: {
+                    sub: '12345678-1234-1234-1234-123456789012',
+                    email: 'test@example.com',
+                },
+                codeParameter: '555666',
+                linkParameter: '',
+                usernameParameter: null,
+            },
+            response: {
+                smsMessage: null,
+                emailSubject: '',
+                emailMessage: '',
+            },
+        };
+
+        const result = await callHandler(handler, event);
+
+        expect(result.response.emailSubject).toBe('Verify Your Account');
+        expect(result.response.emailMessage).toContain('555666');
+        expect(result.response.emailMessage).toContain(String(new Date().getFullYear()));
+        expect(result.response.smsMessage).toBe('Your verification code is: 555666');
+    });
+
     it('throws error when code parameter is missing', async () => {
         const { handler } = await import('./handler.js');
 
