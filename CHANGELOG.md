@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.27.1] - 2026-03-17
+
+### Fixed
+- **Build: Cross-shell compatibility for copy-assets script**
+  - Fixed GitHub Actions deployment failure caused by shell-specific brace expansion
+  - Replaced `*.{html,txt}` pattern with separate copy commands for .html and .txt files
+  - Ensures build works correctly across different shell environments (bash, sh, dash)
+
 ## [1.27.0] - 2026-03-17
 
 ### Added
