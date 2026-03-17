@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.28.0] - 2026-03-17
+
 ### Added
 - **Cognito: Dedicated templates for user attribute verification**
   - New `verify-attribute.html` template for email/phone change verification
