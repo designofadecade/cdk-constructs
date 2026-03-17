@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.27.4] - 2026-03-17
+
 ### Fixed
 - **Cognito: Support for VerifyUserAttribute custom message trigger**
   - Added support for `CustomMessage_VerifyUserAttribute` trigger
