@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.27.2] - 2026-03-17
+
 ### Added
 - **Cognito: Signup verification message customization**
   - Added support for `CustomMessage_SignUp` trigger to customize account verification messages
