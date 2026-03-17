@@ -278,9 +278,9 @@ const auth = new Cognito(this, 'Auth', {
   - Consider setting an external ID for enhanced security in production environments
   - Use `Cognito.createSmsRole()` helper method or let the construct auto-create the role
 
-## Customizing MFA and Password Reset Messages
+## Customizing User Messages
 
-The construct includes Lambda triggers that style MFA and password reset messages using HTML templates for emails and text templates for SMS messages. To use custom message styling:
+The construct includes Lambda triggers that style user authentication messages using HTML templates for emails and text templates for SMS messages. To use custom message styling:
 
 ```typescript
 import { Cognito } from '@designofadecade/cdk-constructs';
@@ -293,6 +293,7 @@ const customMessageFn = new LambdaFunction(this, 'CustomMessage', {
   code: Code.fromAsset(Cognito.CustomMessageFunctionEntryPath()),
   environment: {
     // Optional: Customize email subjects
+    COGNITO_SIGNUP_SUBJECT: 'Verify Your Account',
     COGNITO_FORGOT_PASSWORD_SUBJECT: 'Reset Your Password',
     COGNITO_MFA_SUBJECT: 'Your Security Code',
   },
@@ -319,14 +320,16 @@ const auth = new Cognito(this, 'Auth', {
 ```
 
 The custom message handler automatically styles:
-- **Password Reset Emails** - Modern HTML template with verification code
+- **Signup Verification Emails** - Welcome message with account verification code
+- **Signup Verification SMS** - Concise text message with verification code
+- **Password Reset Emails** - Modern HTML template with reset code
 - **Password Reset SMS** - Concise text message with reset code
 - **MFA Emails** - Security-focused design with authentication code
 - **MFA SMS** - Short text message with verification code
 
 Email templates include:
 - Responsive design for mobile and desktop
-- Clear security warnings
+- Clear security warnings and instructions
 - Professional styling matching your brand
 - Auto-updating copyright year
 
@@ -338,8 +341,8 @@ SMS templates provide:
 ### Customizing Templates
 
 The function bundle includes default templates that you can modify:
-- **Email Templates**: `forgotpassword.html` and `mfa.html`
-- **SMS Templates**: `forgotpassword-sms.txt` and `mfa-sms.txt`
+- **Email Templates**: `signup.html`, `forgotpassword.html`, and `mfa.html`
+- **SMS Templates**: `signup-sms.txt`, `forgotpassword-sms.txt`, and `mfa-sms.txt`
 
 All templates support the `{code}` placeholder which is replaced with the actual verification code. Email templates also support `{year}` for copyright notices.
 

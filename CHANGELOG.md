@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Cognito: Signup verification message customization**
+  - Added support for `CustomMessage_SignUp` trigger to customize account verification messages
+  - New HTML template (`signup.html`) for signup verification emails with welcome message
+  - New SMS template (`signup-sms.txt`) for account verification text messages
+  - `COGNITO_SIGNUP_SUBJECT` environment variable to customize signup email subject (default: "Verify Your Account")
+  - Professional welcome email design with verification code and security information
+  - Template placeholders: `{code}` for verification code, `{year}` for copyright year
+  - Comprehensive test coverage for signup verification message customization
+  - Updated documentation with signup message examples and configuration guidance
+
 ## [1.27.1] - 2026-03-17
 
 ### Fixed

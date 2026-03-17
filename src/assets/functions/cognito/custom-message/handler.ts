@@ -8,18 +8,23 @@ const __dirname = dirname(fileURLToPath((import.meta as any).url));
 // Load email templates
 const forgotPasswordTemplatePath = resolve(__dirname, 'forgotpassword.html');
 const mfaTemplatePath = resolve(__dirname, 'mfa.html');
+const signupTemplatePath = resolve(__dirname, 'signup.html');
 const forgotPasswordTemplateHtml = readFileSync(forgotPasswordTemplatePath, 'utf8');
 const mfaTemplateHtml = readFileSync(mfaTemplatePath, 'utf8');
+const signupTemplateHtml = readFileSync(signupTemplatePath, 'utf8');
 
 // Load SMS templates
 const forgotPasswordSmsTemplatePath = resolve(__dirname, 'forgotpassword-sms.txt');
 const mfaSmsTemplatePath = resolve(__dirname, 'mfa-sms.txt');
+const signupSmsTemplatePath = resolve(__dirname, 'signup-sms.txt');
 const forgotPasswordSmsTemplate = readFileSync(forgotPasswordSmsTemplatePath, 'utf8');
 const mfaSmsTemplate = readFileSync(mfaSmsTemplatePath, 'utf8');
+const signupSmsTemplate = readFileSync(signupSmsTemplatePath, 'utf8');
 
 // Default subjects
 const defaultForgotPasswordSubject = 'Password Reset';
 const defaultMfaSubject = 'Your Verification Code';
+const defaultSignupSubject = 'Verify Your Account';
 
 /**
  * Lambda handler for Cognito custom message trigger
@@ -57,6 +62,20 @@ export const handler: CustomMessageTriggerHandler = async (event: CustomMessageT
                 .replaceAll('{code}', code)
                 .replaceAll('{year}', currentYear);
             const smsMessage = mfaSmsTemplate
+                .replaceAll('{code}', code);
+
+            event.response.emailSubject = subject;
+            event.response.emailMessage = htmlMessage;
+            event.response.smsMessage = smsMessage;
+        }
+
+        // Handle Sign Up Verification
+        if (event?.triggerSource === 'CustomMessage_SignUp') {
+            const subject = process.env.COGNITO_SIGNUP_SUBJECT || defaultSignupSubject;
+            const htmlMessage = signupTemplateHtml
+                .replaceAll('{code}', code)
+                .replaceAll('{year}', currentYear);
+            const smsMessage = signupSmsTemplate
                 .replaceAll('{code}', code);
 
             event.response.emailSubject = subject;
