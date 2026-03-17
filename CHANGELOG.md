@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Cognito: Test coverage for custom message handler logging**
+  - Added tests to verify trigger invocation logging
+  - Added tests to verify signup verification processing logs
+  - Added tests to verify user attribute verification processing logs
+  - Ensures diagnostic logging is working correctly
+
 ## [1.28.0] - 2026-03-17
 
 ### Added
