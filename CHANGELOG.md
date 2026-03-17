@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.26.1] - 2026-03-17
+
+### Fixed
+- **Cognito: SMS role CloudFormation dependency issue**
+  - Fixed "Role does not have permission to publish with SNS" error during deployment
+  - Added explicit dependency to ensure SMS role's IAM policy is created before UserPool
+  - Prevents race condition when auto-creating SMS role for MFA
+
 ### Added
 - **Cognito: SMS MFA support**
   - New `sms` configuration option for SMS-based multi-factor authentication

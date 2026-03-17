@@ -881,6 +881,11 @@ export class Cognito extends Construct {
                     : {}),
         });
 
+        // Ensure SMS role's default policy is created before UserPool when auto-created
+        if (props.sms && !props.sms.smsRole && smsRole) {
+            this.#userPool.node.addDependency(smsRole);
+        }
+
         this.#userPoolDomain = this.#userPool.addDomain('UserPoolDomain', {
             managedLoginVersion: ManagedLoginVersion.NEWER_MANAGED_LOGIN,
             ...(props.customDomain
