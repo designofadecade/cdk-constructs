@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.30.1] - 2026-04-10
+
+### Fixed
+- **Cognito: Email OTP MFA now properly configured via EmailMfaConfiguration**
+  - Fixed silent failure where AWS was discarding `EnabledMfas` array when `EmailMfaConfiguration` was null
+  - Cognito's `AWS::Cognito::UserPool` requires both `EnabledMfas: ["EMAIL_OTP"]` AND `EmailMfaConfiguration` with Subject/Message containing `{####}` template variable
+  - The construct now applies `EmailMfaConfiguration` via CFN property override when `mfaSecondFactor.email: true` and `sesEmail` is configured
+  - Added validation warning when email MFA is requested without SES email configuration
+
+### Added
+- **Cognito: Email OTP customization fields on `SesEmailConfig`**
+  - `mfaOtpSubject?: string` - Email subject line for MFA codes (default: "Your verification code is {####}")
+  - `mfaOtpMessage?: string` - Email message body for MFA codes (default: "Your verification code is {####}")
+  - Both fields must contain the `{####}` template variable for the OTP code
+  - Optional fields with sensible defaults — no breaking changes for existing callers
+
 ## [1.30.0] - 2026-04-10
 
 ### Fixed

@@ -7,6 +7,7 @@ import {
     CfnManagedLoginBranding,
     CfnLogDeliveryConfiguration,
     CfnUserPoolRiskConfigurationAttachment,
+    CfnUserPool,
     StringAttribute,
     ClientAttributes,
     UserPoolEmail,
@@ -307,6 +308,22 @@ export interface SesEmailConfig {
      * The verified SES domain
      */
     readonly verifiedDomain: string;
+
+    /**
+     * Email OTP subject line for MFA
+     * Used when email is enabled as an MFA method
+     * Must contain the {####} template variable for the OTP code
+     * @default "Your verification code is {####}"
+     */
+    readonly mfaOtpSubject?: string;
+
+    /**
+     * Email OTP message body for MFA
+     * Used when email is enabled as an MFA method
+     * Must contain the {####} template variable for the OTP code
+     * @default "Your verification code is {####}"
+     */
+    readonly mfaOtpMessage?: string;
 }
 
 /**
@@ -916,6 +933,18 @@ export class Cognito extends Construct {
         // Ensure SMS role's default policy is created before UserPool when auto-created
         if (props.sms && !props.sms.smsRole && smsRole) {
             this.#userPool.node.addDependency(smsRole);
+        }
+
+        // Apply EmailMfaConfiguration via CFN escape hatch when email MFA is enabled
+        const mfaSecondFactor = Cognito.getMfaSecondFactor(props.mfa, props.mfaSecondFactor, props.sesEmail, props.sms);
+        const emailMfaEnabled = mfaSecondFactor?.email === true;
+
+        if (emailMfaEnabled && props.sesEmail) {
+            const cfnUserPool = this.#userPool.node.defaultChild as CfnUserPool;
+            cfnUserPool.addPropertyOverride('EmailMfaConfiguration', {
+                Subject: props.sesEmail.mfaOtpSubject ?? 'Your verification code is {####}',
+                Message: props.sesEmail.mfaOtpMessage ?? 'Your verification code is {####}',
+            });
         }
 
         this.#userPoolDomain = this.#userPool.addDomain('UserPoolDomain', {
@@ -1553,8 +1582,12 @@ export class Cognito extends Construct {
             (typeof mfa === 'object' ? mfa.mfaSecondFactor : undefined);
 
         if (explicitConfig) {
-            // If email MFA is requested but SES is not configured, remove email
+            // If email MFA is requested but SES is not configured, remove email and warn
             if (explicitConfig.email && !sesEmail) {
+                console.warn(
+                    '[Cognito] Email MFA requested but SES email configuration is not provided. Email MFA will be disabled. '
+                    + 'To enable email MFA, configure the sesEmail property with mfaOtpSubject and mfaOtpMessage.'
+                );
                 return {
                     ...explicitConfig,
                     email: false,
