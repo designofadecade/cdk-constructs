@@ -2,6 +2,7 @@ import { Construct } from 'constructs';
 import { Tags, CfnOutput, Duration, RemovalPolicy } from 'aws-cdk-lib';
 import {
     UserPool,
+    AccountRecovery,
     ManagedLoginVersion,
     CfnManagedLoginBranding,
     CfnLogDeliveryConfiguration,
@@ -701,6 +702,21 @@ export interface CognitoProps {
     readonly threatProtection?: ThreatProtectionConfig;
 
     /**
+     * Optional account recovery setting for the User Pool.
+     * Controls which recovery mechanisms Cognito offers and how Managed Login prioritises them.
+     *
+     * Smart defaults (applied when `sesEmail` is configured and no explicit override is given):
+     * - `sesEmail` + `sms` both set → `AccountRecovery.EMAIL_AND_PHONE_WITHOUT_MFA`
+     *   (email priority 1, phone priority 2 — Managed Login shows all MFA options)
+     * - `sesEmail` set, `sms` not set → `AccountRecovery.EMAIL_ONLY`
+     *   (no phone path in Managed Login)
+     * - Neither set → CDK default (`AccountRecovery.PHONE_WITHOUT_MFA_AND_EMAIL`)
+     *
+     * @default see smart defaults above
+     */
+    readonly accountRecovery?: AccountRecovery;
+
+    /**
      * Optional WAF Web ACL to associate with this User Pool
      * Note: WAF must use REGIONAL scope for Cognito User Pools
      */
@@ -784,6 +800,11 @@ export class Cognito extends Construct {
     static readonly FeaturePlan = FeaturePlan;
 
     /**
+     * Account recovery options
+     */
+    static readonly AccountRecovery = AccountRecovery;
+
+    /**
      * Log event source types for Cognito logging
      */
     static readonly LogEventSource = LogEventSource;
@@ -835,6 +856,16 @@ export class Cognito extends Construct {
         // Auto-create SMS role if SMS is configured but no role is provided
         const smsRole = props.sms?.smsRole ?? (props.sms ? Cognito.createSmsRole(this, 'SmsRole') : undefined);
 
+        // Derive account recovery: explicit override > smart default > CDK default
+        // When email is the sign-in alias, email must be priority-1 recovery so that
+        // Cognito Managed Login presents all MFA options rather than jumping to SMS.
+        const accountRecovery = props.accountRecovery
+            ?? (props.sesEmail && props.sms
+                ? AccountRecovery.EMAIL_AND_PHONE_WITHOUT_MFA  // email first, phone second
+                : props.sesEmail
+                    ? AccountRecovery.EMAIL_ONLY               // email only, no phone
+                    : undefined);                              // CDK default (phone first)
+
         this.#userPool = new UserPool(this, 'UserPool', {
             userPoolName: props.stack.label,
             featurePlan: props.featurePlan ?? FeaturePlan.ESSENTIALS,
@@ -874,6 +905,7 @@ export class Cognito extends Construct {
                     smsRoleExternalId: props.sms.externalId,
                 }
                 : {}),
+            ...(accountRecovery !== undefined ? { accountRecovery } : {}),
             ...(props.threatProtection?.standardThreatProtectionMode !== undefined
                 ? { standardThreatProtectionMode: props.threatProtection.standardThreatProtectionMode }
                 : props.threatProtection?.customThreatProtectionMode !== undefined

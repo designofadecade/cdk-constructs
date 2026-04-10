@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.29.0] - 2026-04-10
+
+### Fixed
+- **Cognito: MFA method selection — users now see all MFA options instead of defaulting to SMS**
+  - Cognito Managed Login (NEWER_MANAGED_LOGIN) was always front-loading the SMS/phone path
+    even when OTP and Email MFA were enabled, because the User Pool used CDK's default
+    `AccountRecovery.PHONE_WITHOUT_MFA_AND_EMAIL` which registers `verified_phone_number`
+    as the priority-1 recovery mechanism
+  - The construct now applies a smart `accountRecovery` default based on the configured
+    email and SMS options:
+    - `sesEmail` + `sms` both configured → `AccountRecovery.EMAIL_AND_PHONE_WITHOUT_MFA`
+      (email is priority 1; Managed Login presents the MFA method-selection screen)
+    - `sesEmail` configured, no `sms` → `AccountRecovery.EMAIL_ONLY`
+      (no phone/SMS path in Managed Login at all)
+    - Neither configured → CDK default preserved for backward compatibility
+
+### Added
+- **Cognito: `accountRecovery` prop on `CognitoProps`**
+  - Optional `accountRecovery?: AccountRecovery` prop allows explicit override of the
+    recovery mechanism for callers that need non-default behaviour
+  - `Cognito.AccountRecovery` static exposes the `AccountRecovery` enum so callers do
+    not need a separate import from `aws-cdk-lib/aws-cognito`
+
 ### Removed
 - **Cognito: Removed all console logging from custom message handler**
   - Removed console.error for missing code parameter

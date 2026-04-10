@@ -266,6 +266,34 @@ const auth = new Cognito(this, 'Auth', {
 });
 ```
 
+**Important Notes about MFA method ordering:**
+
+Cognito Managed Login uses the User Pool's `accountRecovery` setting to determine which MFA method is presented first. When `sesEmail` is configured, the construct automatically sets email as recovery priority 1 so users see the MFA method-selection screen (OTP / Email / SMS) rather than going straight to SMS:
+
+| `sesEmail` | `sms` | Auto `accountRecovery` | Result |
+|---|---|---|---|
+| ✅ | ✅ | `EMAIL_AND_PHONE_WITHOUT_MFA` | Method selection screen shown |
+| ✅ | ❌ | `EMAIL_ONLY` | No SMS/phone path at all |
+| ❌ | any | CDK default | Phone/SMS front-loaded |
+
+You can override this with the `accountRecovery` prop:
+
+```typescript
+import { Cognito } from '@designofadecade/cdk-constructs';
+
+const auth = new Cognito(this, 'Auth', {
+  stack: { id: 'my-app', label: 'My App', tags: [] },
+  mfa: {
+    required: true,
+    mfaSecondFactor: { otp: true, email: true, sms: true },
+  },
+  sesEmail: { fromEmail: 'noreply@example.com', verifiedDomain: 'example.com' },
+  sms: { externalId: 'my-external-id' },
+  // Explicit override (optional — smart default already handles this case)
+  accountRecovery: Cognito.AccountRecovery.EMAIL_AND_PHONE_WITHOUT_MFA,
+});
+```
+
 **Important Notes:**
 - **Email MFA** requires SES (Simple Email Service) configuration. Messages are charged separately by Amazon SES. Ensure you have:
   - SES configured in your AWS account
@@ -744,6 +772,7 @@ const auth = new Cognito(this, 'Auth', {
 | `logs` | `CognitoLogsConfig` | - | CloudWatch Logs configuration |
 | `threatProtection` | `ThreatProtectionConfig` | - | Advanced Security features |
 | `waf` | `Waf` | - | WAF Web ACL for network protection |
+| `accountRecovery` | `AccountRecovery` | Smart default (see below) | Override the Cognito account recovery mechanism |
 
 ## Getters
 
