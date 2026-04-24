@@ -5,6 +5,30 @@ import { ObjectOwnership } from 'aws-cdk-lib/aws-s3';
 import { S3Bucket } from './S3Bucket.js';
 
 describe('S3Bucket', () => {
+    it('imports an existing bucket by name without creating a new bucket resource', () => {
+        const app = new App();
+        const stack = new Stack(app, 'TestStack');
+
+        const imported = S3Bucket.fromBucketName(stack, 'ImportedBucket', 'existing-bucket-name');
+
+        expect(imported.bucketName).toBe('existing-bucket-name');
+
+        const template = Template.fromStack(stack);
+        template.resourceCountIs('AWS::S3::Bucket', 0);
+    });
+
+    it('imports an existing bucket by ARN without creating a new bucket resource', () => {
+        const app = new App();
+        const stack = new Stack(app, 'TestStack');
+
+        const imported = S3Bucket.fromBucketArn(stack, 'ImportedBucketByArn', 'arn:aws:s3:::existing-bucket-name');
+
+        expect(imported.bucketArn).toBe('arn:aws:s3:::existing-bucket-name');
+
+        const template = Template.fromStack(stack);
+        template.resourceCountIs('AWS::S3::Bucket', 0);
+    });
+
     it('creates an S3 bucket with encryption', () => {
         const app = new App();
         const stack = new Stack(app, 'TestStack');

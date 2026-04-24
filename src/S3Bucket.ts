@@ -75,6 +75,25 @@ export class S3Bucket extends Construct {
      */
     static readonly BUCKET_OWNER_PREFERRED = ObjectOwnership.BUCKET_OWNER_PREFERRED;
 
+    /**
+     * Imports an existing S3 bucket by name.
+     *
+     * Use this when the bucket already exists and should not be created by this construct.
+     */
+    static fromBucketName(scope: Construct, id: string, bucketName: string): IBucket {
+        return Bucket.fromBucketName(scope, id, bucketName);
+    }
+
+    /**
+     * Imports an existing S3 bucket by ARN.
+     *
+     * Use this when you already have the bucket ARN and do not want this construct
+     * to create a new bucket.
+     */
+    static fromBucketArn(scope: Construct, id: string, bucketArn: string): IBucket {
+        return Bucket.fromBucketArn(scope, id, bucketArn);
+    }
+
     #bucket: Bucket;
 
     constructor(scope: Construct, id: string, props: S3BucketProps) {
