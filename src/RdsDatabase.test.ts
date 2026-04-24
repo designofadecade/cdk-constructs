@@ -119,6 +119,27 @@ describe('RdsDatabase', () => {
         template.resourceCountIs('AWS::RDS::DBInstance', 3);
     });
 
+    it('restores cluster from snapshot when snapshotIdentifier is provided', () => {
+        const app = new App();
+        const stack = new Stack(app, 'TestStack');
+        const vpc = new Vpc(stack, 'TestVpc', {
+            name: 'test-vpc',
+            stack: { id: 'test', tags: [] },
+        });
+
+        new RdsDatabase(stack, 'TestDatabase', {
+            name: 'test-db',
+            vpc: vpc.vpc,
+            snapshotIdentifier: 'test-db-snapshot',
+            stack: { id: 'test', tags: [] },
+        });
+
+        const template = Template.fromStack(stack);
+        template.hasResourceProperties('AWS::RDS::DBCluster', {
+            SnapshotIdentifier: 'test-db-snapshot',
+        });
+    });
+
     it('exposes cluster and security group', () => {
         const app = new App();
         const stack = new Stack(app, 'TestStack');

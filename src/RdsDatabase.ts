@@ -2,8 +2,10 @@ import { Construct } from 'constructs';
 import { Duration, Tags, RemovalPolicy, CfnOutput } from 'aws-cdk-lib';
 import {
     DatabaseCluster,
+    DatabaseClusterFromSnapshot,
     DatabaseClusterEngine,
     Credentials,
+    SnapshotCredentials,
     AuroraPostgresEngineVersion,
     ClusterInstance,
     type IClusterEngine,
@@ -84,6 +86,11 @@ export interface RdsDatabaseProps {
      * Minimum: 1 day, Maximum: 35 days
      */
     readonly backupRetentionDays?: number;
+
+    /**
+     * Optional cluster snapshot identifier to restore from
+     */
+    readonly snapshotIdentifier?: string;
 }
 
 /**
@@ -121,7 +128,7 @@ export class RdsDatabase extends Construct {
     static readonly InstanceSize = InstanceSize;
 
     #securityGroup: ISecurityGroup;
-    #rds: DatabaseCluster;
+    #rds: DatabaseCluster | DatabaseClusterFromSnapshot;
     #port: number;
 
     constructor(scope: Construct, id: string, props: RdsDatabaseProps) {
@@ -146,14 +153,20 @@ export class RdsDatabase extends Construct {
             });
         }
 
-        this.#rds = new DatabaseCluster(this, 'Database', {
+        const readers = props.readers
+            ? Array.from({ length: props.readers }, (_, i) =>
+                ClusterInstance.provisioned(`reader-${i + 1}`, {
+                    instanceType: InstanceType.of(
+                        InstanceClass.BURSTABLE4_GRAVITON,
+                        props.instanceSize ?? InstanceSize.SMALL,
+                    ),
+                }),
+            )
+            : undefined;
+
+        const baseClusterProps = {
             clusterIdentifier: props.name,
             engine,
-            defaultDatabaseName: props.databaseName ?? 'postgres',
-            storageEncrypted: true,
-            credentials: Credentials.fromGeneratedSecret(props.username ?? `${props.name}_admin`, {
-                secretName: props.secretName ?? `${props.name}-rds-credentials`,
-            }),
             vpc: props.vpc,
             vpcSubnets: {
                 subnetType: SubnetType.PRIVATE_ISOLATED,
@@ -166,21 +179,31 @@ export class RdsDatabase extends Construct {
                     props.instanceSize ?? InstanceSize.SMALL,
                 ),
             }),
-            readers: props.readers
-                ? Array.from({ length: props.readers }, (_, i) =>
-                    ClusterInstance.provisioned(`reader-${i + 1}`, {
-                        instanceType: InstanceType.of(
-                            InstanceClass.BURSTABLE4_GRAVITON,
-                            props.instanceSize ?? InstanceSize.SMALL,
-                        ),
-                    }),
-                )
-                : undefined,
+            readers,
             backup: {
                 retention: Duration.days(props.backupRetentionDays ?? 7),
             },
             removalPolicy: RemovalPolicy.RETAIN,
-        });
+        };
+
+        if (props.snapshotIdentifier) {
+            this.#rds = new DatabaseClusterFromSnapshot(this, 'Database', {
+                ...baseClusterProps,
+                snapshotIdentifier: props.snapshotIdentifier,
+                snapshotCredentials: props.username
+                    ? SnapshotCredentials.fromGeneratedSecret(props.username)
+                    : undefined,
+            });
+        } else {
+            this.#rds = new DatabaseCluster(this, 'Database', {
+                ...baseClusterProps,
+                defaultDatabaseName: props.databaseName ?? 'postgres',
+                storageEncrypted: true,
+                credentials: Credentials.fromGeneratedSecret(props.username ?? `${props.name}_admin`, {
+                    secretName: props.secretName ?? `${props.name}-rds-credentials`,
+                }),
+            });
+        }
 
         props.stack.tags.forEach(({ key, value }) => {
             Tags.of(this.#securityGroup).add(key, value);
