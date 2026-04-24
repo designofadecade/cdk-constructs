@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { App, Stack } from 'aws-cdk-lib';
-import { Template } from 'aws-cdk-lib/assertions';
+import { Match, Template } from 'aws-cdk-lib/assertions';
 import { Sqs } from './Sqs.js';
 
 describe('Sqs', () => {
@@ -89,6 +89,36 @@ describe('Sqs', () => {
         const template = Template.fromStack(stack);
         template.hasOutput('*', {
             Description: 'SQS Queue URL',
+        });
+    });
+
+    it('allows custom queue timing and retry options', () => {
+        const app = new App();
+        const stack = new Stack(app, 'TestStack');
+
+        new Sqs(stack, 'TestQueue', {
+            name: 'test-queue',
+            retentionDays: 7,
+            deadLetterRetentionDays: 10,
+            visibilityTimeoutSeconds: 60,
+            maxReceiveCount: 5,
+            stack: { id: 'test', tags: [] },
+        });
+
+        const template = Template.fromStack(stack);
+        template.hasResourceProperties('AWS::SQS::Queue', {
+            QueueName: 'test-queue',
+            MessageRetentionPeriod: 604800,
+            VisibilityTimeout: 60,
+            RedrivePolicy: Match.objectLike({
+                maxReceiveCount: 5,
+            }),
+        });
+
+        template.hasResourceProperties('AWS::SQS::Queue', {
+            QueueName: 'test-queue-deadletter',
+            MessageRetentionPeriod: 864000,
+            VisibilityTimeout: 60,
         });
     });
 });

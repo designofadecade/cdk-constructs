@@ -1,11 +1,13 @@
 import { Construct } from 'constructs';
 import { Fn, Duration, Tags, CfnOutput, RemovalPolicy } from 'aws-cdk-lib';
-import { HttpApi as AwsHttpApi, HttpMethod, CorsHttpMethod, type IHttpRouteAuthorizer } from 'aws-cdk-lib/aws-apigatewayv2';
+import { HttpApi as AwsHttpApi, HttpMethod, CorsHttpMethod, CfnIntegration, CfnRoute, type IHttpRouteAuthorizer } from 'aws-cdk-lib/aws-apigatewayv2';
 import { HttpLambdaIntegration } from 'aws-cdk-lib/aws-apigatewayv2-integrations';
 import { HttpLambdaAuthorizer, HttpLambdaResponseType } from 'aws-cdk-lib/aws-apigatewayv2-authorizers';
 import type { IFunction } from 'aws-cdk-lib/aws-lambda';
 import { LogGroup, RetentionDays, type ILogGroup } from 'aws-cdk-lib/aws-logs';
 import type { IBucket } from 'aws-cdk-lib/aws-s3';
+import type { IQueue } from 'aws-cdk-lib/aws-sqs';
+import { Role, ServicePrincipal } from 'aws-cdk-lib/aws-iam';
 
 /**
  * HTTP method types supported by API Gateway
@@ -20,6 +22,32 @@ export interface AddFunctionIntegrationOptions {
      * Optional authorizer for this route
      */
     readonly authorizer?: IHttpRouteAuthorizer;
+}
+
+/**
+ * Options for adding an SQS service integration
+ */
+export interface AddSqsIntegrationOptions {
+    /**
+     * HTTP methods to accept (default: ['POST'])
+     */
+    readonly methods?: HttpMethodType[];
+
+    /**
+     * Optional custom message body mapping expression
+     * @default '$request.body'
+     */
+    readonly messageBody?: string;
+
+    /**
+     * Optional event type convenience attribute (maps to message attribute event_type)
+     */
+    readonly eventType?: string;
+
+    /**
+     * Optional static string message attributes
+     */
+    readonly messageAttributes?: Record<string, string>;
 }
 
 /**
@@ -398,6 +426,64 @@ export class HttpApi extends Construct {
             methods: methods.map((method) => HttpMethod[method]),
             integration: new HttpLambdaIntegration(`FunctionIntegration${sanitizedPath}`, lambdaFunction),
             authorizer: options.authorizer,
+        });
+    }
+
+    /**
+     * Adds an API Gateway HTTP API direct integration to SQS SendMessage
+     *
+     * This uses an AWS service integration and does not require a Lambda intermediary.
+     *
+     * @param path - The route path (e.g., '/api/deposit/make')
+     * @param queue - SQS queue target
+     * @param options - Optional integration settings
+     */
+    addSqsIntegration(path: string, queue: IQueue, options: AddSqsIntegrationOptions = {}): void {
+        const sanitizedPath = path.replace(/[^a-zA-Z0-9]/g, '');
+        const methods = options.methods ?? ['POST'];
+
+        const role = new Role(this, `SqsIntegrationRole${sanitizedPath}`, {
+            assumedBy: new ServicePrincipal('apigateway.amazonaws.com'),
+        });
+        queue.grantSendMessages(role);
+
+        const attributes = {
+            ...(options.messageAttributes ?? {}),
+            ...(options.eventType ? { event_type: options.eventType } : {}),
+        };
+
+        const requestParameters: Record<string, string> = {
+            QueueUrl: queue.queueUrl,
+            MessageBody: options.messageBody ?? '$request.body',
+        };
+
+        if (Object.keys(attributes).length > 0) {
+            requestParameters.MessageAttributes = JSON.stringify(
+                Object.entries(attributes).reduce<Record<string, { DataType: string; StringValue: string }>>((acc, [key, value]) => {
+                    acc[key] = {
+                        DataType: 'String',
+                        StringValue: value,
+                    };
+                    return acc;
+                }, {}),
+            );
+        }
+
+        const integration = new CfnIntegration(this, `SqsIntegration${sanitizedPath}`, {
+            apiId: this.#httpApi.apiId,
+            credentialsArn: role.roleArn,
+            integrationType: 'AWS_PROXY',
+            integrationSubtype: 'SQS-SendMessage',
+            payloadFormatVersion: '1.0',
+            requestParameters,
+        });
+
+        methods.forEach((method) => {
+            new CfnRoute(this, `SqsRoute${method}${sanitizedPath}`, {
+                apiId: this.#httpApi.apiId,
+                routeKey: `${method} ${path}`,
+                target: `integrations/${integration.ref}`,
+            });
         });
     }
 

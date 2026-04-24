@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { App, Stack } from 'aws-cdk-lib';
+import { App, Duration, RemovalPolicy, Stack } from 'aws-cdk-lib';
 import { Template } from 'aws-cdk-lib/assertions';
 import { ObjectOwnership } from 'aws-cdk-lib/aws-s3';
 import { S3Bucket } from './S3Bucket.js';
@@ -162,5 +162,84 @@ describe('S3Bucket', () => {
         const bucketProps = Object.values(buckets)[0].Properties;
 
         expect(bucketProps.OwnershipControls).toBeUndefined();
+    });
+
+    it('supports custom removal policy', () => {
+        const app = new App();
+        const stack = new Stack(app, 'TestStack');
+
+        new S3Bucket(stack, 'TestBucket', {
+            name: 'test-bucket',
+            stack: { id: 'test', tags: [] },
+            removalPolicy: RemovalPolicy.DESTROY,
+        });
+
+        const template = Template.fromStack(stack);
+        template.hasResource('AWS::S3::Bucket', {
+            DeletionPolicy: 'Delete',
+            UpdateReplacePolicy: 'Delete',
+        });
+    });
+
+    it('supports CORS rules from props', () => {
+        const app = new App();
+        const stack = new Stack(app, 'TestStack');
+
+        new S3Bucket(stack, 'TestBucket', {
+            name: 'test-bucket',
+            stack: { id: 'test', tags: [] },
+            cors: [
+                {
+                    allowedMethods: ['GET', 'POST'],
+                    allowedOrigins: ['https://example.com'],
+                    allowedHeaders: ['*'],
+                },
+            ],
+        });
+
+        const template = Template.fromStack(stack);
+        template.hasResourceProperties('AWS::S3::Bucket', {
+            CorsConfiguration: {
+                CorsRules: [
+                    {
+                        AllowedHeaders: ['*'],
+                        AllowedMethods: ['GET', 'POST'],
+                        AllowedOrigins: ['https://example.com'],
+                    },
+                ],
+            },
+        });
+    });
+
+    it('supports lifecycle rules from props', () => {
+        const app = new App();
+        const stack = new Stack(app, 'TestStack');
+
+        new S3Bucket(stack, 'TestBucket', {
+            name: 'test-bucket',
+            stack: { id: 'test', tags: [] },
+            lifecycleRules: [
+                {
+                    id: 'DeleteTemporaryFiles',
+                    enabled: true,
+                    expiration: Duration.days(1),
+                    prefix: 'temp/',
+                },
+            ],
+        });
+
+        const template = Template.fromStack(stack);
+        template.hasResourceProperties('AWS::S3::Bucket', {
+            LifecycleConfiguration: {
+                Rules: [
+                    {
+                        Id: 'DeleteTemporaryFiles',
+                        Status: 'Enabled',
+                        ExpirationInDays: 1,
+                        Prefix: 'temp/',
+                    },
+                ],
+            },
+        });
     });
 });

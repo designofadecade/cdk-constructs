@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { App, Stack } from 'aws-cdk-lib';
 import { Template, Match } from 'aws-cdk-lib/assertions';
 import { Vpc } from 'aws-cdk-lib/aws-ec2';
-import { Code, LambdaInsightsVersion } from 'aws-cdk-lib/aws-lambda';
+import { Code, LambdaInsightsVersion, LayerVersion } from 'aws-cdk-lib/aws-lambda';
 import { Function } from '../src/Function.js';
 
 describe('Function', () => {
@@ -293,6 +293,52 @@ describe('Function', () => {
             Layers: [
                 'arn:aws:lambda:ca-central-1:580247275435:layer:LambdaInsightsExtension-Arm64:35',
             ],
+        });
+    });
+
+    it('supports custom Lambda layers', () => {
+        const app = new App();
+        const stack = new Stack(app, 'TestStack');
+        const layer = LayerVersion.fromLayerVersionArn(
+            stack,
+            'CustomLayer',
+            'arn:aws:lambda:ca-central-1:123456789012:layer:test-layer:1',
+        );
+
+        new Function(stack, 'TestFunction', {
+            code: Code.fromInline('exports.handler = async () => ({ statusCode: 200 })'),
+            name: 'test-function',
+            layers: [layer],
+            stack: { id: 'test', tags: [] },
+        });
+
+        const template = Template.fromStack(stack);
+        template.hasResourceProperties('AWS::Lambda::Function', {
+            Layers: ['arn:aws:lambda:ca-central-1:123456789012:layer:test-layer:1'],
+        });
+    });
+
+    it('supports entry functions with external modules', () => {
+        const app = new App();
+        const stack = new Stack(app, 'TestStack');
+        const layer = LayerVersion.fromLayerVersionArn(
+            stack,
+            'ExternalModulesLayer',
+            'arn:aws:lambda:ca-central-1:123456789012:layer:test-layer:2',
+        );
+
+        new Function(stack, 'TestFunction', {
+            entry: './tests/fixtures/test-handler.ts',
+            name: 'test-entry-function',
+            externalModules: ['sharp', '@aws-sdk/client-sqs'],
+            layers: [layer],
+            stack: { id: 'test', tags: [] },
+        });
+
+        const template = Template.fromStack(stack);
+        template.hasResourceProperties('AWS::Lambda::Function', {
+            FunctionName: 'test-entry-function',
+            Layers: ['arn:aws:lambda:ca-central-1:123456789012:layer:test-layer:2'],
         });
     });
 });

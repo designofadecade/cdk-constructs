@@ -1,9 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { App, Stack } from 'aws-cdk-lib';
-import { Template } from 'aws-cdk-lib/assertions';
+import { Match, Template } from 'aws-cdk-lib/assertions';
 import { Function as LambdaFunction, Runtime, Code } from 'aws-cdk-lib/aws-lambda';
 import { RetentionDays } from 'aws-cdk-lib/aws-logs';
 import { Bucket } from 'aws-cdk-lib/aws-s3';
+import { Queue } from 'aws-cdk-lib/aws-sqs';
 import { HttpApi } from './HttpApi.js';
 
 describe('HttpApi', () => {
@@ -194,5 +195,55 @@ describe('HttpApi', () => {
         const template = Template.fromStack(stack);
         template.resourceCountIs('AWS::Logs::LogGroup', 1);
         template.resourceCountIs('AWS::S3::Bucket', 1);
+    });
+
+    it('adds direct SQS service integration', () => {
+        const app = new App();
+        const stack = new Stack(app, 'TestStack');
+        const queue = new Queue(stack, 'TestQueue');
+
+        const api = new HttpApi(stack, 'TestApi', {
+            name: 'test-api',
+            stack: { id: 'test', tags: [] },
+        });
+
+        api.addSqsIntegration('/api/deposit/make', queue);
+
+        const template = Template.fromStack(stack);
+        template.hasResourceProperties('AWS::ApiGatewayV2::Integration', {
+            IntegrationType: 'AWS_PROXY',
+            IntegrationSubtype: 'SQS-SendMessage',
+            PayloadFormatVersion: '1.0',
+            RequestParameters: {
+                MessageBody: '$request.body',
+                QueueUrl: Match.anyValue(),
+            },
+        });
+
+        template.hasResourceProperties('AWS::ApiGatewayV2::Route', {
+            RouteKey: 'POST /api/deposit/make',
+        });
+    });
+
+    it('adds event_type message attribute for SQS integration when eventType is provided', () => {
+        const app = new App();
+        const stack = new Stack(app, 'TestStack');
+        const queue = new Queue(stack, 'TestQueue');
+
+        const api = new HttpApi(stack, 'TestApi', {
+            name: 'test-api',
+            stack: { id: 'test', tags: [] },
+        });
+
+        api.addSqsIntegration('/api/deposit/make', queue, {
+            eventType: 'deposit:make',
+        });
+
+        const template = Template.fromStack(stack);
+        template.hasResourceProperties('AWS::ApiGatewayV2::Integration', {
+            RequestParameters: Match.objectLike({
+                MessageAttributes: '{"event_type":{"DataType":"String","StringValue":"deposit:make"}}',
+            }),
+        });
     });
 });

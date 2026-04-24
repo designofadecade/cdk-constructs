@@ -19,6 +19,26 @@ export interface SqsProps {
     readonly stack: {
         readonly tags: ReadonlyArray<{ readonly key: string; readonly value: string }>;
     };
+
+    /**
+     * Main queue retention period in days (default: 4)
+     */
+    readonly retentionDays?: number;
+
+    /**
+     * Dead-letter queue retention period in days (default: 14)
+     */
+    readonly deadLetterRetentionDays?: number;
+
+    /**
+     * Queue visibility timeout in seconds for both queues (default: 120)
+     */
+    readonly visibilityTimeoutSeconds?: number;
+
+    /**
+     * Maximum receive attempts before moving message to DLQ (default: 3)
+     */
+    readonly maxReceiveCount?: number;
 }
 
 /**
@@ -29,7 +49,7 @@ export interface SqsProps {
  * - Dead-letter queue with 14-day retention
  * - SQS-managed encryption
  * - SSL enforcement
- * - 5 max receive attempts before moving to DLQ
+ * - 3 max receive attempts before moving to DLQ
  * - Helper methods for Lambda integration
  * 
  * @example
@@ -55,20 +75,20 @@ export class Sqs extends Construct {
 
         this.#deadLetterQueue = new Queue(this, 'QueueDeadLetter', {
             queueName: `${props.name}-deadletter`,
-            retentionPeriod: Duration.days(14),
-            visibilityTimeout: Duration.seconds(120),
+            retentionPeriod: Duration.days(props.deadLetterRetentionDays ?? 14),
+            visibilityTimeout: Duration.seconds(props.visibilityTimeoutSeconds ?? 120),
             encryption: QueueEncryption.SQS_MANAGED,
             enforceSSL: true,
         });
 
         this.#queue = new Queue(this, 'Queue', {
             queueName: props.name,
-            retentionPeriod: Duration.days(4),
-            visibilityTimeout: Duration.seconds(120),
+            retentionPeriod: Duration.days(props.retentionDays ?? 4),
+            visibilityTimeout: Duration.seconds(props.visibilityTimeoutSeconds ?? 120),
             encryption: QueueEncryption.SQS_MANAGED,
             enforceSSL: true,
             deadLetterQueue: {
-                maxReceiveCount: 3,
+                maxReceiveCount: props.maxReceiveCount ?? 3,
                 queue: this.#deadLetterQueue,
             },
         });

@@ -5,6 +5,39 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.32.0] - 2026-04-24
+
+### Added
+- **HttpApi: Direct SQS service integrations**
+  - New `addSqsIntegration()` helper for API Gateway HTTP API -> SQS `SQS-SendMessage`
+  - Supports custom methods, custom message body mapping, static message attributes, and `eventType` convenience mapping to `event_type`
+  - Uses IAM role-based service integration and preserves existing `addFunctionIntegration()` behavior
+
+- **EventBridge: Pattern-based rule helper**
+  - New `EventBridge.pattern()` API for creating event-pattern rules with Lambda or explicit targets
+  - Complements existing cron-based `EventBridge.task()` without changing defaults
+
+- **Function: Bundling and layer parity options**
+  - New optional `externalModules?: string[]` for entry-based function bundling
+  - New optional `layers?: ILayerVersion[]` supported for both inline-code and entry-based functions
+  - Existing defaults remain unchanged when options are not provided
+
+- **Sqs: Optional queue timing/retry configuration**
+  - New optional props: `retentionDays`, `deadLetterRetentionDays`, `visibilityTimeoutSeconds`, `maxReceiveCount`
+  - Existing defaults are preserved (`4` day main retention, `14` day DLQ retention, `120` second visibility timeout, `3` max receives)
+
+- **S3Bucket: Creation-time parity options**
+  - New optional props: `removalPolicy`, `cors`, `lifecycleRules`
+  - Default secure behavior is unchanged (`RETAIN`, blocked public access, S3-managed encryption)
+
+- **Backup: New AWS Backup helper construct**
+  - Added `Backup` construct to provision a backup plan, backup selection, and managed backup role wiring
+  - Supports configurable retention and continuous backup settings
+
+- **GuardDuty: New malware protection helper construct**
+  - Added `GuardDutyMalwareProtection` construct for S3 bucket malware scanning plans
+  - Provisions role permissions and `AWS::GuardDuty::MalwareProtectionPlan` with configurable object prefixes and tagging mode
+
 ## [1.30.1] - 2026-04-10
 
 ### Fixed

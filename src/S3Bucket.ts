@@ -1,6 +1,6 @@
 import { Construct } from 'constructs';
 import { RemovalPolicy, Duration, Tags, CfnOutput } from 'aws-cdk-lib';
-import { Bucket, BlockPublicAccess, BucketEncryption, EventType, NotificationKeyFilter, type IBucket, CfnBucket, ObjectOwnership } from 'aws-cdk-lib/aws-s3';
+import { Bucket, BlockPublicAccess, BucketEncryption, EventType, NotificationKeyFilter, type IBucket, CfnBucket, ObjectOwnership, type CorsRule, type LifecycleRule } from 'aws-cdk-lib/aws-s3';
 import { LambdaDestination } from 'aws-cdk-lib/aws-s3-notifications';
 import { IFunction } from 'aws-cdk-lib/aws-lambda';
 import type { IGrantable } from 'aws-cdk-lib/aws-iam';
@@ -43,6 +43,22 @@ export interface S3BucketProps {
      * ```
      */
     readonly objectOwnership?: ObjectOwnership;
+
+    /**
+     * Optional bucket removal policy
+     * @default RemovalPolicy.RETAIN
+     */
+    readonly removalPolicy?: RemovalPolicy;
+
+    /**
+     * Optional CORS rules
+     */
+    readonly cors?: ReadonlyArray<CorsRule>;
+
+    /**
+     * Optional lifecycle rules
+     */
+    readonly lifecycleRules?: ReadonlyArray<LifecycleRule>;
 }
 
 /**
@@ -101,10 +117,12 @@ export class S3Bucket extends Construct {
 
         this.#bucket = new Bucket(this, id, {
             bucketName: props.name,
-            removalPolicy: RemovalPolicy.RETAIN,
+            removalPolicy: props.removalPolicy ?? RemovalPolicy.RETAIN,
             blockPublicAccess: BlockPublicAccess.BLOCK_ALL,
             publicReadAccess: false,
             encryption: BucketEncryption.S3_MANAGED,
+            cors: props.cors ? [...props.cors] : undefined,
+            lifecycleRules: props.lifecycleRules ? [...props.lifecycleRules] : undefined,
         });
 
         // Configure object ownership controls if specified

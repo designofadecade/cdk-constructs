@@ -78,4 +78,48 @@ describe('EventBridge', () => {
             ],
         });
     });
+
+    it('creates pattern rule for lambda target', () => {
+        const app = new App();
+        const stack = new Stack(app, 'TestStack');
+        const lambda = new Function(stack, 'PatternLambda', {
+            code: Code.fromInline('exports.handler = async () => ({ statusCode: 200 })'),
+            name: 'pattern-function',
+            stack: { id: 'test', tags: [] },
+        });
+
+        EventBridge.pattern({
+            scope: stack,
+            name: 'guardduty-pattern',
+            description: 'GuardDuty events',
+            eventPattern: {
+                source: ['aws.guardduty'],
+                'detail-type': ['GuardDuty Malware Protection Object Scan Result'],
+            },
+            lambdaFunction: lambda.function,
+        });
+
+        const template = Template.fromStack(stack);
+        template.hasResourceProperties('AWS::Events::Rule', {
+            EventPattern: {
+                source: ['aws.guardduty'],
+                'detail-type': ['GuardDuty Malware Protection Object Scan Result'],
+            },
+        });
+    });
+
+    it('throws when pattern rule has no targets', () => {
+        const app = new App();
+        const stack = new Stack(app, 'TestStack');
+
+        expect(() => {
+            EventBridge.pattern({
+                scope: stack,
+                name: 'invalid-pattern',
+                eventPattern: {
+                    source: ['aws.guardduty'],
+                },
+            });
+        }).toThrow('EventBridge.pattern requires either lambdaFunction or targets');
+    });
 });

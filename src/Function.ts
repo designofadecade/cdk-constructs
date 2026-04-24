@@ -13,6 +13,7 @@ import {
     Alias,
     type IScalableFunctionAttribute,
     LambdaInsightsVersion,
+    type ILayerVersion,
 } from 'aws-cdk-lib/aws-lambda';
 import { SecurityGroup, type IVpc, type ISecurityGroup } from 'aws-cdk-lib/aws-ec2';
 import { BucketDeployment, Source } from 'aws-cdk-lib/aws-s3-deployment';
@@ -127,6 +128,16 @@ export interface FunctionProps {
      * Optional additional assets to copy into the Lambda bundle
      */
     readonly assets?: ReadonlyArray<string | AssetConfig>;
+
+    /**
+     * Optional external modules excluded from bundling
+     */
+    readonly externalModules?: ReadonlyArray<string>;
+
+    /**
+     * Optional Lambda layers to attach
+     */
+    readonly layers?: ReadonlyArray<ILayerVersion>;
 
     /**
      * Whether to add the CJS dynamic import fix banner (for ESM modules importing CJS)
@@ -343,12 +354,14 @@ export class Function extends Construct {
                 timeout: Duration.seconds(props.timeoutSeconds ?? 30),
                 reservedConcurrentExecutions: props.reservedConcurrentExecutions,
                 insightsVersion: props.insightsVersion,
+                layers: props.layers ? [...props.layers] : undefined,
             });
         } else {
             const entryPath = props.entry ? props.entry.replace('file:/', '') : undefined;
             const extraAssets = Array.isArray(props.assets) ? props.assets : [];
             let bundling: any = {
                 format: OutputFormat.ESM,
+                externalModules: props.externalModules ? [...props.externalModules] : undefined,
             };
 
             if (props.fixCsjDynamicImportIssue) {
@@ -413,6 +426,7 @@ export class Function extends Construct {
                 bundling,
                 reservedConcurrentExecutions: props.reservedConcurrentExecutions,
                 insightsVersion: props.insightsVersion,
+                layers: props.layers ? [...props.layers] : undefined,
             });
         }
 

@@ -1,5 +1,5 @@
 import { Construct } from 'constructs';
-import { Rule, Schedule, type IRule } from 'aws-cdk-lib/aws-events';
+import { Rule, Schedule, type IRule, type EventPattern, type IRuleTarget } from 'aws-cdk-lib/aws-events';
 import * as targets from 'aws-cdk-lib/aws-events-targets';
 import type { IFunction } from 'aws-cdk-lib/aws-lambda';
 
@@ -33,6 +33,41 @@ export interface EventBridgeTaskConfig {
      * The Lambda function to invoke on schedule
      */
     readonly lambdaFunction: IFunction;
+}
+
+/**
+ * Configuration for creating a pattern-matching EventBridge rule
+ */
+export interface EventBridgePatternConfig {
+    /**
+     * The parent scope where the rule will be created
+     */
+    readonly scope: Construct;
+
+    /**
+     * The name for the EventBridge rule
+     */
+    readonly name: string;
+
+    /**
+     * Optional description for the rule
+     */
+    readonly description?: string;
+
+    /**
+     * Event pattern used to match incoming events
+     */
+    readonly eventPattern: EventPattern;
+
+    /**
+     * Lambda function to target when the event pattern matches
+     */
+    readonly lambdaFunction?: IFunction;
+
+    /**
+     * Optional explicit EventBridge rule targets
+     */
+    readonly targets?: ReadonlyArray<IRuleTarget>;
 }
 
 /**
@@ -83,6 +118,32 @@ export class EventBridge extends Construct {
             description: config.description,
             schedule: Schedule.expression(`cron(${config.scheduleCron})`),
             targets: [new targets.LambdaFunction(config.lambdaFunction)],
+        });
+    }
+
+    /**
+     * Creates an event pattern rule with Lambda or custom targets
+     *
+     * @param config - Configuration for the pattern rule
+     * @returns The created EventBridge Rule
+     */
+    static pattern(config: EventBridgePatternConfig): IRule {
+        const sanitizedName = config.name.replace(/[^a-zA-Z0-9]/g, '');
+        const ruleTargets = config.targets
+            ? [...config.targets]
+            : config.lambdaFunction
+                ? [new targets.LambdaFunction(config.lambdaFunction)]
+                : [];
+
+        if (ruleTargets.length === 0) {
+            throw new Error('EventBridge.pattern requires either lambdaFunction or targets');
+        }
+
+        return new Rule(config.scope, `PatternRule${sanitizedName}`, {
+            ruleName: config.name,
+            description: config.description,
+            eventPattern: config.eventPattern,
+            targets: ruleTargets,
         });
     }
 }

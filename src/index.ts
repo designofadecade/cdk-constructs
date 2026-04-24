@@ -27,10 +27,16 @@ export type {
 } from './CloudFront.js';
 
 export { EventBridge } from './EventBridge.js';
-export type { EventBridgeTaskConfig } from './EventBridge.js';
+export type { EventBridgeTaskConfig, EventBridgePatternConfig } from './EventBridge.js';
 
 export { S3Bucket } from './S3Bucket.js';
 export type { S3BucketProps } from './S3Bucket.js';
+
+export { Backup } from './Backup.js';
+export type { BackupProps } from './Backup.js';
+
+export { GuardDutyMalwareProtection } from './GuardDutyMalwareProtection.js';
+export type { GuardDutyMalwareProtectionProps } from './GuardDutyMalwareProtection.js';
 
 export { Function } from './Function.js';
 export type { FunctionProps, AssetConfig, FunctionUrlConfig, FunctionUrlAuthTypeOption, CodeFromBucketProps } from './Function.js';
@@ -72,7 +78,7 @@ export type {
 } from './Cognito.js';
 
 export { HttpApi } from './HttpApi.js';
-export type { HttpApiProps, HttpMethodType, AddFunctionIntegrationOptions, CreateAuthorizerFunctionProps, CorsConfig, AccessLogsConfig } from './HttpApi.js';
+export type { HttpApiProps, HttpMethodType, AddFunctionIntegrationOptions, AddSqsIntegrationOptions, CreateAuthorizerFunctionProps, CorsConfig, AccessLogsConfig } from './HttpApi.js';
 
 export { DynamoTable } from './DynamoTable.js';
 export type { DynamoTableProps, GlobalSecondaryIndexConfig } from './DynamoTable.js';
