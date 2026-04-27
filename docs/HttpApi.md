@@ -225,9 +225,13 @@ const api = new HttpApi(this, 'Api', {
 });
 ```
 
-## Lambda Authorizers
+## Authorization
 
-### Create an Authorizer
+### Lambda Authorizers
+
+Lambda authorizers provide custom authentication and authorization logic with caching.
+
+#### Create a Lambda Authorizer
 
 ```typescript
 import { Function } from '@designofadecade/cdk-constructs';
@@ -247,10 +251,10 @@ const authorizer = HttpApi.createAuthorizerFunction(
 );
 ```
 
-### Use Authorizer on Routes
+#### Use Lambda Authorizer on Routes
 
 ```typescript
-// Protected routes with authorizer
+// Protected routes with Lambda authorizer
 api.addFunctionIntegration('/users', usersHandler.function, ['GET', 'POST'], {
   authorizer,
 });
@@ -261,6 +265,82 @@ api.addFunctionIntegration('/admin', adminHandler.function, ['GET', 'PUT', 'DELE
 
 // Public route without authorizer
 api.addFunctionIntegration('/health', healthHandler.function, ['GET']);
+```
+
+### IAM Authorization
+
+IAM authorization uses AWS IAM credentials (SigV4) to authorize requests. Ideal for service-to-service communication or when you want to leverage existing IAM policies.
+
+#### Create an IAM Authorizer
+
+```typescript
+// Create IAM authorizer (no configuration needed)
+const iamAuthorizer = HttpApi.createIamAuthorizer();
+```
+
+#### Use IAM Authorizer on Routes
+
+```typescript
+// Protected routes requiring AWS SigV4 signed requests
+api.addFunctionIntegration('/admin', adminHandler.function, ['GET', 'POST'], {
+  authorizer: iamAuthorizer,
+});
+
+api.addFunctionIntegration('/internal', internalHandler.function, ['POST'], {
+  authorizer: iamAuthorizer,
+});
+```
+
+#### Calling IAM-Protected Routes
+
+Clients must sign requests using AWS SigV4:
+
+```typescript
+import { SignatureV4 } from '@aws-sdk/signature-v4';
+import { HttpRequest } from '@aws-sdk/protocol-http';
+import { Sha256 } from '@aws-crypto/sha256-js';
+
+// Create signed request
+const signer = new SignatureV4({
+  service: 'execute-api',
+  region: 'us-east-1',
+  credentials: {
+    accessKeyId: 'YOUR_ACCESS_KEY',
+    secretAccessKey: 'YOUR_SECRET_KEY',
+  },
+  sha256: Sha256,
+});
+
+const request = new HttpRequest({
+  hostname: 'your-api-id.execute-api.us-east-1.amazonaws.com',
+  path: '/admin',
+  method: 'GET',
+  headers: {
+    host: 'your-api-id.execute-api.us-east-1.amazonaws.com',
+  },
+});
+
+const signedRequest = await signer.sign(request);
+
+// Make request with signed headers
+fetch(signedRequest.url, {
+  headers: signedRequest.headers,
+});
+```
+
+#### Grant IAM Permissions
+
+Grant IAM principals permission to invoke the API:
+
+```typescript
+import { PolicyStatement, Effect } from 'aws-cdk-lib/aws-iam';
+
+// Grant Lambda function permission to call the API
+lambdaFunction.addToRolePolicy(new PolicyStatement({
+  effect: Effect.ALLOW,
+  actions: ['execute-api:Invoke'],
+  resources: [`arn:aws:execute-api:${region}:${account}:${api.apiId}/*`],
+}));
 ```
 
 ## Properties
@@ -361,6 +441,26 @@ const authorizer = HttpApi.createAuthorizerFunction(
 );
 ```
 
+### HttpApi.createIamAuthorizer()
+
+Static method to create an IAM authorizer for HTTP API routes.
+
+```typescript
+static createIamAuthorizer(): HttpIamAuthorizer
+```
+
+**Returns:** Configured HTTP IAM authorizer
+
+The authorizer:
+- Uses AWS IAM credentials (SigV4) to authorize requests
+- No caching configuration needed (handled by AWS)
+- Ideal for service-to-service communication
+
+**Example:**
+```typescript
+const iamAuthorizer = HttpApi.createIamAuthorizer();
+```
+
 ## Getters
 
 - `api` - HTTP API instance (`AwsHttpApi`)
@@ -373,7 +473,9 @@ const authorizer = HttpApi.createAuthorizerFunction(
 
 1. **Use HTTP API** over REST API for lower cost and latency (up to 71% cheaper)
 2. **Enable CORS** only for required origins in production
-3. **Use Lambda authorizers** for custom authentication logic with caching
+3. **Choose the right authorizer:**
+   - **Lambda authorizers** for custom authentication logic with caching
+   - **IAM authorizers** for service-to-service communication or AWS IAM integration
 4. **Enable access logging** for monitoring, debugging, and audit compliance
 5. **Use default log format** for comprehensive audit trails (includes user identity, performance metrics, and errors)
 6. **Set appropriate log retention** to balance cost and compliance needs (consider 13+ months for audit requirements)
@@ -382,6 +484,7 @@ const authorizer = HttpApi.createAuthorizerFunction(
 9. **Monitor authorization failures** using the `principalId` and error fields
 10. **Use path parameters** for RESTful resource identifiers (e.g., `/users/{id}`)
 11. **Group related routes** to the same Lambda function for efficiency
+12. **Use IAM authorization** when calling from AWS services (Lambda, ECS, etc.) to avoid managing additional credentials
 
 ## Related Constructs
 

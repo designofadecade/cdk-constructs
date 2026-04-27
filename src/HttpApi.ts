@@ -2,7 +2,7 @@ import { Construct } from 'constructs';
 import { Fn, Duration, Tags, CfnOutput, RemovalPolicy } from 'aws-cdk-lib';
 import { HttpApi as AwsHttpApi, HttpMethod, CorsHttpMethod, CfnIntegration, CfnRoute, type IHttpRouteAuthorizer } from 'aws-cdk-lib/aws-apigatewayv2';
 import { HttpLambdaIntegration } from 'aws-cdk-lib/aws-apigatewayv2-integrations';
-import { HttpLambdaAuthorizer, HttpLambdaResponseType } from 'aws-cdk-lib/aws-apigatewayv2-authorizers';
+import { HttpLambdaAuthorizer, HttpLambdaResponseType, HttpIamAuthorizer } from 'aws-cdk-lib/aws-apigatewayv2-authorizers';
 import type { IFunction } from 'aws-cdk-lib/aws-lambda';
 import { LogGroup, RetentionDays, type ILogGroup } from 'aws-cdk-lib/aws-logs';
 import type { IBucket } from 'aws-cdk-lib/aws-s3';
@@ -193,16 +193,24 @@ export interface CreateAuthorizerFunctionProps {
  *   stack: { id: 'my-app', tags: [] },
  * });
  * 
- * // Create an authorizer
+ * // Create a Lambda authorizer
  * const authorizer = HttpApi.createAuthorizerFunction(
  *   'MyAuthorizer',
  *   authFunction,
  *   { resultsCacheTtl: 300 }
  * );
  * 
- * // Add a protected route
+ * // Add a protected route with Lambda authorizer
  * api.addFunctionIntegration('/users', usersFunction, ['GET', 'POST'], {
  *   authorizer,
+ * });
+ * 
+ * // Create an IAM authorizer (requires AWS SigV4 signed requests)
+ * const iamAuthorizer = HttpApi.createIamAuthorizer();
+ * 
+ * // Add a route protected with IAM authorization
+ * api.addFunctionIntegration('/admin', adminFunction, ['GET', 'POST'], {
+ *   authorizer: iamAuthorizer,
  * });
  * 
  * // Add a public route
@@ -520,4 +528,27 @@ export class HttpApi extends Construct {
             resultsCacheTtl: Duration.seconds(props?.resultsCacheTtl ?? 300),
         });
     }
+
+    /**
+     * Creates an IAM authorizer for HTTP API routes
+     * 
+     * The authorizer uses AWS IAM credentials (SigV4) to authorize requests.
+     * Requests must be signed using AWS credentials.
+     * 
+     * @returns A configured HTTP IAM authorizer
+     * 
+     * @example
+     * ```typescript
+     * const iamAuthorizer = HttpApi.createIamAuthorizer();
+     * 
+     * api.addFunctionIntegration('/admin', adminFunction, ['GET', 'POST'], {
+     *   authorizer: iamAuthorizer,
+     * });
+     * ```
+     */
+    static createIamAuthorizer(): HttpIamAuthorizer {
+        return new HttpIamAuthorizer();
+    }
+
+
 }

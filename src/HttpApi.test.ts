@@ -246,4 +246,92 @@ describe('HttpApi', () => {
             }),
         });
     });
+
+    it('creates Lambda authorizer with default cache TTL', () => {
+        const app = new App();
+        const stack = new Stack(app, 'TestStack');
+        const authFunction = new LambdaFunction(stack, 'AuthFunction', {
+            code: Code.fromAsset('./tests/fixtures'),
+            handler: 'test-handler.handler',
+            runtime: Runtime.NODEJS_20_X,
+        });
+
+        const authorizer = HttpApi.createAuthorizerFunction('TestAuth', authFunction);
+
+        expect(authorizer).toBeDefined();
+    });
+
+    it('creates Lambda authorizer with custom cache TTL', () => {
+        const app = new App();
+        const stack = new Stack(app, 'TestStack');
+        const authFunction = new LambdaFunction(stack, 'AuthFunction', {
+            code: Code.fromAsset('./tests/fixtures'),
+            handler: 'test-handler.handler',
+            runtime: Runtime.NODEJS_20_X,
+        });
+
+        const authorizer = HttpApi.createAuthorizerFunction('TestAuth', authFunction, {
+            resultsCacheTtl: 600,
+        });
+
+        expect(authorizer).toBeDefined();
+    });
+
+    it('creates IAM authorizer', () => {
+        const authorizer = HttpApi.createIamAuthorizer();
+
+        expect(authorizer).toBeDefined();
+    });
+
+    it('adds route with Lambda authorizer', () => {
+        const app = new App();
+        const stack = new Stack(app, 'TestStack');
+        const lambda = new LambdaFunction(stack, 'TestLambda', {
+            code: Code.fromAsset('./tests/fixtures'),
+            handler: 'test-handler.handler',
+            runtime: Runtime.NODEJS_20_X,
+        });
+        const authFunction = new LambdaFunction(stack, 'AuthFunction', {
+            code: Code.fromAsset('./tests/fixtures'),
+            handler: 'test-handler.handler',
+            runtime: Runtime.NODEJS_20_X,
+        });
+
+        const api = new HttpApi(stack, 'TestApi', {
+            name: 'test-api',
+            stack: { id: 'test', tags: [] },
+        });
+
+        const authorizer = HttpApi.createAuthorizerFunction('TestAuth', authFunction);
+        api.addFunctionIntegration('/protected', lambda, ['GET'], { authorizer });
+
+        const template = Template.fromStack(stack);
+        template.resourceCountIs('AWS::ApiGatewayV2::Route', 1);
+        template.resourceCountIs('AWS::ApiGatewayV2::Authorizer', 1);
+    });
+
+    it('adds route with IAM authorizer', () => {
+        const app = new App();
+        const stack = new Stack(app, 'TestStack');
+        const lambda = new LambdaFunction(stack, 'TestLambda', {
+            code: Code.fromAsset('./tests/fixtures'),
+            handler: 'test-handler.handler',
+            runtime: Runtime.NODEJS_20_X,
+        });
+
+        const api = new HttpApi(stack, 'TestApi', {
+            name: 'test-api',
+            stack: { id: 'test', tags: [] },
+        });
+
+        const iamAuthorizer = HttpApi.createIamAuthorizer();
+        api.addFunctionIntegration('/admin', lambda, ['GET'], { authorizer: iamAuthorizer });
+
+        const template = Template.fromStack(stack);
+        template.resourceCountIs('AWS::ApiGatewayV2::Route', 1);
+        // Note: IAM authorization is built into API Gateway and doesn't create a separate Authorizer resource
+        template.hasResourceProperties('AWS::ApiGatewayV2::Route', {
+            AuthorizationType: 'AWS_IAM',
+        });
+    });
 });
