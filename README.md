@@ -59,7 +59,7 @@ Comprehensive documentation for all constructs is available in the [`docs/`](./d
 - **[Complete Documentation Index](./docs/README.md)** - Overview and quick start examples
 - **[Function](./docs/Function.md)** - Lambda functions with concurrency and auto-scaling best practices
 - **[Vpc](./docs/Vpc.md)** - VPC configuration and networking
-- **[RdsDatabase](./docs/RdsDatabase.md)** - Aurora Serverless v2 databases
+- **[RdsDatabase](./docs/RdsDatabase.md)** - Aurora databases (provisioned and serverless v2)
 - **[S3Bucket](./docs/S3Bucket.md)** - S3 buckets with security practices
 - **[DynamoTable](./docs/DynamoTable.md)** - DynamoDB tables
 - **[Cognito](./docs/Cognito.md)** - User authentication
@@ -103,7 +103,7 @@ Each document includes:
 
 ### Database
 
-- **[RdsDatabase](#rdsdatabase)** - RDS PostgreSQL database with automated backups
+- **[RdsDatabase](#rdsdatabase)** - Aurora databases with provisioned and serverless v2 instances
 
 ### Authentication & Authorization
 
@@ -309,26 +309,51 @@ const table = new DynamoTable(this, 'MyTable', {
 
 ### RdsDatabase
 
-Creates an RDS PostgreSQL database with automated backups.
+Creates an Aurora database cluster with support for both provisioned and serverless v2 instances.
 
+**Serverless v2 Example:**
+```typescript
+import { DatabaseClusterEngine, AuroraMysqlEngineVersion } from 'aws-cdk-lib/aws-rds';
+
+const database = new RdsDatabase(this, 'MyDatabase', {
+  name: 'my-database',
+  vpc: vpc.vpc,
+  databaseName: 'appdata',
+  serverlessV2MinCapacity: 0.5,
+  serverlessV2MaxCapacity: 4,
+  readers: 1,
+  engine: DatabaseClusterEngine.auroraMysql({
+    version: AuroraMysqlEngineVersion.VER_3_12_0,
+  }),
+  backupRetentionDays: 7,
+  stack: { id: 'my-app', tags: [] },
+});
+```
+
+**Provisioned Instance Example:**
 ```typescript
 const database = new RdsDatabase(this, 'MyDatabase', {
-  vpc,
-  engine: DatabaseInstanceEngine.postgres({ version: PostgresEngineVersion.VER_15 }),
-  instanceType: InstanceType.of(InstanceClass.T3, InstanceSize.SMALL),
-  allocatedStorage: 20,
-  multiAz: true,
-  backupRetention: Duration.days(7),
+  name: 'my-database',
+  vpc: vpc.vpc,
+  databaseName: 'appdata',
+  instanceClass: RdsDatabase.InstanceClass.MEMORY5_GRAVITON,
+  instanceSize: RdsDatabase.InstanceSize.LARGE,
+  readers: 2,
+  backupRetentionDays: 14,
+  stack: { id: 'my-app', tags: [] },
 });
 ```
 
 **Key Features:**
-- Multi-AZ deployment
-- Automated backups
-- Encryption at rest
-- VPC placement
+- Aurora PostgreSQL or MySQL support (default: PostgreSQL 17.6)
+- Provisioned or serverless v2 instances
+- Multi-AZ deployment with read replicas
+- Automated backups with configurable retention
+- Encryption at rest enabled
+- Deployed in private isolated subnets
 - Security group configuration
 - Secrets Manager integration for credentials
+- Restore from snapshot support
 
 ### Sqs
 

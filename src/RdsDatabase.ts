@@ -67,9 +67,26 @@ export interface RdsDatabaseProps {
     readonly secretName?: string;
 
     /**
+     * Optional instance class (default: BURSTABLE4_GRAVITON)
+     */
+    readonly instanceClass?: InstanceClass;
+
+    /**
      * Optional instance size (default: SMALL)
      */
     readonly instanceSize?: InstanceSize;
+
+    /**
+     * Optional serverless v2 minimum capacity in ACUs (Aurora Capacity Units)
+     * If specified, creates serverless instances instead of provisioned
+     */
+    readonly serverlessV2MinCapacity?: number;
+
+    /**
+     * Optional serverless v2 maximum capacity in ACUs (Aurora Capacity Units)
+     * If specified, creates serverless instances instead of provisioned
+     */
+    readonly serverlessV2MaxCapacity?: number;
 
     /**
      * Optional number of reader instances (default: none)
@@ -104,28 +121,51 @@ export interface RdsDatabaseProps {
  * - 7-day backup retention
  * - Deletion protection enabled
  * - Support for read replicas
+ * - Support for both provisioned and serverless v2 instances
  * 
  * @example
+ * Provisioned instance:
  * ```typescript
  * const database = new RdsDatabase(this, 'Database', {
  *   name: 'my-app-db',
  *   vpc: myVpc,
  *   databaseName: 'appdata',
+ *   instanceClass: RdsDatabase.InstanceClass.BURSTABLE4_GRAVITON,
  *   instanceSize: RdsDatabase.InstanceSize.MEDIUM,
  *   readers: 1,
  *   ingressSecurityGroups: [lambdaSecurityGroup],
  *   stack: { id: 'my-app', tags: [] },
  * });
+ * ```
  * 
+ * Serverless v2 instance:
+ * ```typescript
+ * const database = new RdsDatabase(this, 'Database', {
+ *   name: 'my-app-db',
+ *   vpc: myVpc,
+ *   databaseName: 'appdata',
+ *   serverlessV2MinCapacity: 0.5,
+ *   serverlessV2MaxCapacity: 4,
+ *   readers: 1,
+ *   ingressSecurityGroups: [lambdaSecurityGroup],
+ *   stack: { id: 'my-app', tags: [] },
+ * });
+ * ```
+ * 
+ * @example
  * // Grant access to additional security groups
  * database.addSecurityGroupIngressRule(bastionSecurityGroup);
- * ```
  */
 export class RdsDatabase extends Construct {
     /**
      * Re-export InstanceSize for convenience
      */
     static readonly InstanceSize = InstanceSize;
+
+    /**
+     * Re-export InstanceClass for convenience
+     */
+    static readonly InstanceClass = InstanceClass;
 
     #securityGroup: ISecurityGroup;
     #rds: DatabaseCluster | DatabaseClusterFromSnapshot;
@@ -153,16 +193,30 @@ export class RdsDatabase extends Construct {
             });
         }
 
-        const readers = props.readers
-            ? Array.from({ length: props.readers }, (_, i) =>
-                ClusterInstance.provisioned(`reader-${i + 1}`, {
-                    instanceType: InstanceType.of(
-                        InstanceClass.BURSTABLE4_GRAVITON,
-                        props.instanceSize ?? InstanceSize.SMALL,
-                    ),
-                }),
-            )
-            : undefined;
+        const isServerless = props.serverlessV2MinCapacity !== undefined || props.serverlessV2MaxCapacity !== undefined;
+
+        let writer;
+        let readers;
+
+        if (isServerless) {
+            writer = ClusterInstance.serverlessV2('writer');
+            readers = props.readers
+                ? Array.from({ length: props.readers }, (_, i) =>
+                    ClusterInstance.serverlessV2(`reader-${i + 1}`),
+                )
+                : undefined;
+        } else {
+            const instanceType = InstanceType.of(
+                props.instanceClass ?? InstanceClass.BURSTABLE4_GRAVITON,
+                props.instanceSize ?? InstanceSize.SMALL,
+            );
+            writer = ClusterInstance.provisioned('writer', { instanceType });
+            readers = props.readers
+                ? Array.from({ length: props.readers }, (_, i) =>
+                    ClusterInstance.provisioned(`reader-${i + 1}`, { instanceType }),
+                )
+                : undefined;
+        }
 
         const baseClusterProps = {
             clusterIdentifier: props.name,
@@ -173,13 +227,12 @@ export class RdsDatabase extends Construct {
                 onePerAz: true,
             },
             securityGroups: [this.#securityGroup],
-            writer: ClusterInstance.provisioned('writer', {
-                instanceType: InstanceType.of(
-                    InstanceClass.BURSTABLE4_GRAVITON,
-                    props.instanceSize ?? InstanceSize.SMALL,
-                ),
-            }),
+            writer,
             readers,
+            ...(isServerless && {
+                serverlessV2MinCapacity: props.serverlessV2MinCapacity,
+                serverlessV2MaxCapacity: props.serverlessV2MaxCapacity,
+            }),
             backup: {
                 retention: Duration.days(props.backupRetentionDays ?? 7),
             },

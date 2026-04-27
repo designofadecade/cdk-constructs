@@ -20,7 +20,7 @@ Comprehensive documentation for all CDK constructs in this library.
 - **[DynamoTable](./DynamoTable.md)** - DynamoDB tables
 
 ### Database
-- **[RdsDatabase](./RdsDatabase.md)** - Aurora Serverless v2 databases
+- **[RdsDatabase](./RdsDatabase.md)** - Aurora databases (provisioned and serverless v2)
 
 ### Messaging & Events
 - **[Sqs](./Sqs.md)** - SQS queues with dead letter queues
@@ -105,9 +105,9 @@ const vpc = new Vpc(this, 'Vpc', {
 const db = new RdsDatabase(this, 'Database', {
   name: 'portal-db',
   vpc: vpc.vpc,
-  engine: 'postgres',
-  minCapacity: 0.5,
-  maxCapacity: 2,
+  databaseName: 'portal',
+  serverlessV2MinCapacity: 0.5,
+  serverlessV2MaxCapacity: 2,
   stack: { id: 'portal', tags: [] },
 });
 
@@ -117,8 +117,8 @@ const portal = new Function(this, 'Portal', {
   entry: './src/portal.ts',
   vpc: vpc.vpc,
   environment: {
-    DB_ENDPOINT: db.endpoint,
-    DB_SECRET_ARN: db.secret.secretArn,
+    DB_ENDPOINT: db.clusterEndpoint.hostname,
+    DB_SECRET_ARN: db.secretArn,
   },
   memorySize: 1024,
   timeoutSeconds: 30,
