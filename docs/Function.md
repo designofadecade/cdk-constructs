@@ -25,7 +25,7 @@ import { Function } from '@designofadecade/cdk-constructs';
 
 const fn = new Function(this, 'SimpleFunction', {
   name: 'simple-function',
-  code: Function.PlaceHolderCode(),
+  code: Function.placeHolderCode(),
   stack: { id: 'my-app', tags: [] },
 });
 ```
@@ -351,7 +351,7 @@ Enable CloudWatch Lambda Insights for enhanced monitoring and troubleshooting:
 const fn = new Function(this, 'MonitoredFunction', {
   name: 'monitored-function',
   entry: './src/handlers/monitored.ts',
-  insightsVersion: Function.LatestInsightsVersion,
+  insightsVersion: Function.latestInsightsVersion,
   stack: { id: 'my-app', tags: [] },
 });
 
@@ -359,7 +359,7 @@ const fn = new Function(this, 'MonitoredFunction', {
 const fnVersion = new Function(this, 'SpecificVersion', {
   name: 'specific-version',
   entry: './src/handlers/specific.ts',
-  insightsVersion: Function.InsightsVersion(35),
+  insightsVersion: Function.insightsVersion(35),
   stack: { id: 'my-app', tags: [] },
 });
 
@@ -411,7 +411,7 @@ Check the [AWS Lambda Insights documentation](https://docs.aws.amazon.com/Amazon
 Deploy placeholder code initially, update later:
 
 ```typescript
-const code = Function.CodeFromBucket(
+const code = Function.codeFromBucket(
   this,
   myBucket,
   'functions/my-function.zip'
@@ -469,20 +469,20 @@ const fn = new Function(this, 'S3Function', {
 
 ## Static Methods
 
-### `Function.PlaceHolderCode()`
+### `Function.placeHolderCode()`
 
 Creates placeholder code that returns 501 Not Implemented.
 
 ```typescript
-const code = Function.PlaceHolderCode();
+const code = Function.placeHolderCode();
 ```
 
-### `Function.CodeFromBucket(scope, bucket, key, props?)`
+### `Function.codeFromBucket(scope, bucket, key, props?)`
 
 Creates code from S3 bucket with initial placeholder deployment.
 
 ```typescript
-const code = Function.CodeFromBucket(
+const code = Function.codeFromBucket(
   this,
   myBucket,
   'functions/my-function.zip',
@@ -490,7 +490,7 @@ const code = Function.CodeFromBucket(
 );
 ```
 
-### `Function.LatestInsightsVersion`
+### `Function.latestInsightsVersion`
 
 Gets the latest Lambda Insights version (currently VERSION_1_0_498_0). This uses CDK's predefined version constant, which is portable across regions and architectures.
 
@@ -498,12 +498,12 @@ Gets the latest Lambda Insights version (currently VERSION_1_0_498_0). This uses
 const fn = new Function(this, 'MyFunction', {
   name: 'my-function',
   entry: './src/handler.ts',
-  insightsVersion: Function.LatestInsightsVersion,
+  insightsVersion: Function.latestInsightsVersion,
   stack: { id: 'my-app', tags: [] },
 });
 ```
 
-### `Function.InsightsVersion(version)`
+### `Function.insightsVersion(version)`
 
 Creates a Lambda Insights version for ARM64 architecture in ca-central-1 with a specific version number. Returns a function that generates the appropriate layer ARN.
 
@@ -511,7 +511,7 @@ Creates a Lambda Insights version for ARM64 architecture in ca-central-1 with a 
 const fn = new Function(this, 'MyFunction', {
   name: 'my-function',
   entry: './src/handler.ts',
-  insightsVersion: Function.InsightsVersion(35),
+  insightsVersion: Function.insightsVersion(35),
   stack: { id: 'my-app', tags: [] },
 });
 ```

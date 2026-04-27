@@ -259,14 +259,14 @@ describe('Function', () => {
         });
     });
 
-    it('uses LatestInsightsVersion helper', () => {
+    it('uses latestInsightsVersion helper', () => {
         const app = new App();
         const stack = new Stack(app, 'TestStack');
 
         new Function(stack, 'TestFunction', {
             code: Code.fromInline('exports.handler = async () => ({ statusCode: 200 })'),
             name: 'test-function',
-            insightsVersion: Function.LatestInsightsVersion,
+            insightsVersion: Function.latestInsightsVersion,
             stack: { id: 'test', tags: [] },
         });
 
@@ -277,14 +277,14 @@ describe('Function', () => {
         });
     });
 
-    it('uses InsightsVersion helper with custom version', () => {
+    it('uses insightsVersion helper with custom version', () => {
         const app = new App();
         const stack = new Stack(app, 'TestStack');
 
         new Function(stack, 'TestFunction', {
             code: Code.fromInline('exports.handler = async () => ({ statusCode: 200 })'),
             name: 'test-function',
-            insightsVersion: Function.InsightsVersion(35),
+            insightsVersion: Function.insightsVersion(35),
             stack: { id: 'test', tags: [] },
         });
 

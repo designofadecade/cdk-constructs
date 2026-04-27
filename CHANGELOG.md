@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.33.0] - 2026-04-27
+
+### Added
+- **RdsDatabase: Serverless v2 and provisioned instance support**
+  - Added `instanceClass?: InstanceClass` prop for configurable instance class (default: `BURSTABLE4_GRAVITON`)
+  - Added `serverlessV2MinCapacity?: number` prop for serverless v2 minimum ACU capacity
+  - Added `serverlessV2MaxCapacity?: number` prop for serverless v2 maximum ACU capacity
+  - Construct automatically detects serverless mode when capacity settings are provided
+  - Creates `ClusterInstance.serverlessV2()` for serverless or `ClusterInstance.provisioned()` for provisioned instances
+  - Applies configuration to both writer and reader instances
+  - Static export `RdsDatabase.InstanceClass` for convenient access to instance classes
+  - Updated documentation with provisioned vs serverless v2 usage examples and best practices
+
+- **HttpApi: IAM Authorization support**
+  - New `HttpApi.createIamAuthorizer()` static method for AWS IAM (SigV4) authorization
+  - Enables service-to-service communication without custom Lambda authorizers
+  - Routes protected with IAM authorization require AWS SigV4 signed requests
+  - Ideal for internal APIs called by AWS services (Lambda, ECS, etc.)
+
 ## [1.32.0] - 2026-04-24
 
 ### Added

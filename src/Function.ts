@@ -20,6 +20,7 @@ import { BucketDeployment, Source } from 'aws-cdk-lib/aws-s3-deployment';
 import type { IBucket } from 'aws-cdk-lib/aws-s3';
 import type { ILogGroup } from 'aws-cdk-lib/aws-logs';
 import { basename, dirname, isAbsolute, normalize, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 /**
  * Asset configuration for copying files into the Lambda bundle
@@ -295,7 +296,7 @@ export interface CodeFromBucketProps {
  * // Create a function with inline code
  * const simple = new Function(this, 'Simple', {
  *   name: 'simple-function',
- *   code: Function.PlaceHolderCode(),
+ *   code: Function.placeHolderCode(),
  *   stack: { id: 'my-app', tags: [] },
  * });
  * 
@@ -303,7 +304,7 @@ export interface CodeFromBucketProps {
  * const monitored = new Function(this, 'Monitored', {
  *   name: 'monitored-function',
  *   entry: './src/monitored.ts',
- *   insightsVersion: Function.LatestInsightsVersion,
+ *   insightsVersion: Function.latestInsightsVersion,
  *   stack: { id: 'my-app', tags: [] },
  * });
  * 
@@ -588,14 +589,14 @@ export class Function extends Construct {
      * 
      * @example
      * ```typescript
-     * const code = Function.CodeFromBucket(
+     * const code = Function.codeFromBucket(
      *   this,
      *   myBucket,
      *   'functions/my-function.zip'
      * );
      * ```
      */
-    static CodeFromBucket(scope: Construct, codeBucket: IBucket, codeKey: string, props?: CodeFromBucketProps): Code {
+    static codeFromBucket(scope: Construct, codeBucket: IBucket, codeKey: string, props?: CodeFromBucketProps): Code {
         const codeKeyFilename = codeKey.split('/').pop()!;
         const codeKeyPrefix = codeKey.split('/').slice(0, -1).join('/');
 
@@ -615,7 +616,7 @@ export class Function extends Construct {
      * 
      * @returns Lambda Code object with placeholder handler
      */
-    static PlaceHolderCode(): Code {
+    static placeHolderCode(): Code {
         return Code.fromInline(`
             exports.handler = async () => ({ statusCode: 501, body: 'Placeholder' });
         `);
@@ -634,12 +635,12 @@ export class Function extends Construct {
      * const fn = new Function(this, 'MonitoredFunction', {
      *   name: 'monitored-function',
      *   entry: './src/handler.ts',
-     *   insightsVersion: Function.LatestInsightsVersion,
+     *   insightsVersion: Function.latestInsightsVersion,
      *   stack: { id: 'my-app', tags: [] },
      * });
      * ```
      */
-    static get LatestInsightsVersion(): LambdaInsightsVersion {
+    static get latestInsightsVersion(): LambdaInsightsVersion {
         return LambdaInsightsVersion.VERSION_1_0_498_0;
     }
 
@@ -657,14 +658,80 @@ export class Function extends Construct {
      * const fn = new Function(this, 'MonitoredFunction', {
      *   name: 'monitored-function',
      *   entry: './src/handler.ts',
-     *   insightsVersion: Function.InsightsVersion(38),
+     *   insightsVersion: Function.insightsVersion(38),
      *   stack: { id: 'my-app', tags: [] },
      * });
      * ```
      */
-    static InsightsVersion(version: number): LambdaInsightsVersion {
+    static insightsVersion(version: number): LambdaInsightsVersion {
         return LambdaInsightsVersion.fromInsightVersionArn(
             `arn:aws:lambda:ca-central-1:580247275435:layer:LambdaInsightsExtension-Arm64:${version}`,
         );
+    }
+
+    /**
+     * Creates a Lambda layer from an asset
+     * 
+     * This is a convenience method for creating Lambda layers that can be reused
+     * across multiple functions. The layer can be created from a local file path
+     * or a Code object.
+     * 
+     * @param scope - The construct scope
+     * @param id - The construct ID
+     * @param layerVersionName - The name of the layer version
+     * @param description - Description of the layer
+     * @param code - Code object or path to the layer asset (absolute or relative path)
+     * @param compatibleArchitectures - Optional array of compatible architectures (default: ARM_64)
+     * @param compatibleRuntimes - Optional array of compatible runtimes
+     * @returns LayerVersion that can be attached to Lambda functions
+     * 
+     * @example
+     * ```typescript
+     * // Create a Sharp layer from a local zip file
+     * const sharpLayer = Function.createLayer(
+     *   this,
+     *   'SharpLayer',
+     *   `${stack.id}-sharp`,
+     *   'Sharp Image Processing',
+     *   resolve(dirname(fileURLToPath(import.meta.url)), '../../config/functions/layers/sharp-arm64.zip'),
+     *   [Architecture.ARM_64]
+     * );
+     * 
+     * // Create a custom layer with a Code object
+     * const customLayer = Function.createLayer(
+     *   this,
+     *   'CustomLayer',
+     *   'my-custom-layer',
+     *   'Custom utilities',
+     *   Code.fromAsset('./layers/custom')
+     * );
+     * 
+     * // Use the layer in a function
+     * const fn = new Function(this, 'MyFunction', {
+     *   name: 'my-function',
+     *   entry: './src/handler.ts',
+     *   layers: [sharpLayer, customLayer],
+     *   stack: { id: 'my-app', tags: [] },
+     * });
+     * ```
+     */
+    static createLayer(
+        scope: Construct,
+        id: string,
+        layerVersionName: string,
+        description: string,
+        code: Code | string,
+        compatibleArchitectures?: Architecture[],
+        compatibleRuntimes?: Runtime[],
+    ): LayerVersion {
+        const layerCode = typeof code === 'string' ? Code.fromAsset(code) : code;
+
+        return new LayerVersion(scope, id, {
+            layerVersionName,
+            description,
+            code: layerCode,
+            compatibleArchitectures: compatibleArchitectures ?? [Architecture.ARM_64],
+            compatibleRuntimes,
+        });
     }
 }
