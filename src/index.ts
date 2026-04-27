@@ -35,6 +35,9 @@ export type { S3BucketProps } from './S3Bucket.js';
 export { Backup } from './Backup.js';
 export type { BackupProps } from './Backup.js';
 
+export { Access } from './Access.js';
+export type { AccessProps, GitHubOidcConfig, S3AccessConfig, CloudFrontAccessConfig, LambdaAccessConfig } from './Access.js';
+
 export { GuardDutyMalwareProtection } from './GuardDutyMalwareProtection.js';
 export type { GuardDutyMalwareProtectionProps } from './GuardDutyMalwareProtection.js';
 

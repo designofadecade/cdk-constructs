@@ -1,5 +1,5 @@
 import { Construct } from 'constructs';
-import { Fn, Duration, Tags, CfnOutput, RemovalPolicy } from 'aws-cdk-lib';
+import { Fn, Duration, Tags, CfnOutput, RemovalPolicy, Stack } from 'aws-cdk-lib';
 import { HttpApi as AwsHttpApi, HttpMethod, CorsHttpMethod, CfnIntegration, CfnRoute, type IHttpRouteAuthorizer } from 'aws-cdk-lib/aws-apigatewayv2';
 import { HttpLambdaIntegration } from 'aws-cdk-lib/aws-apigatewayv2-integrations';
 import { HttpLambdaAuthorizer, HttpLambdaResponseType, HttpIamAuthorizer } from 'aws-cdk-lib/aws-apigatewayv2-authorizers';
@@ -7,7 +7,7 @@ import type { IFunction } from 'aws-cdk-lib/aws-lambda';
 import { LogGroup, RetentionDays, type ILogGroup } from 'aws-cdk-lib/aws-logs';
 import type { IBucket } from 'aws-cdk-lib/aws-s3';
 import type { IQueue } from 'aws-cdk-lib/aws-sqs';
-import { Role, ServicePrincipal } from 'aws-cdk-lib/aws-iam';
+import { Role, ServicePrincipal, type IGrantable, PolicyStatement } from 'aws-cdk-lib/aws-iam';
 
 /**
  * HTTP method types supported by API Gateway
@@ -548,6 +548,48 @@ export class HttpApi extends Construct {
      */
     static createIamAuthorizer(): HttpIamAuthorizer {
         return new HttpIamAuthorizer();
+    }
+
+    /**
+     * Grants invoke permissions for this HTTP API to an IAM principal
+     * 
+     * @param grantee - The principal to grant permissions to (e.g., Lambda function, IAM role)
+     * @param paths - Route paths to allow (supports wildcards, default: ['*'])
+     * @param methods - HTTP methods to allow (default: ['*'])
+     * @param stage - Stage to allow (default: '*')
+     * 
+     * @example
+     * ```typescript
+     * // Grant invoke permission for all routes
+     * api.grantInvoke(myFunction);
+     * 
+     * // Grant invoke permission for specific path pattern
+     * api.grantInvoke(myFunction, ['/api/database/*']);
+     * 
+     * // Grant invoke permission for specific paths and methods
+     * api.grantInvoke(myFunction, ['/api/users/*', '/api/products/*'], ['GET', 'POST']);
+     * ```
+     */
+    grantInvoke(
+        grantee: IGrantable,
+        paths: string[] = ['*'],
+        methods: (HttpMethodType | '*')[] = ['*'],
+        stage: string = '*',
+    ): void {
+        const stack = Stack.of(this);
+        const resources = paths.flatMap((path) =>
+            methods.map(
+                (method) =>
+                    `arn:aws:execute-api:${stack.region}:${stack.account}:${this.#httpApi.apiId}/${stage}/${method}${path}`,
+            ),
+        );
+
+        grantee.grantPrincipal.addToPrincipalPolicy(
+            new PolicyStatement({
+                actions: ['execute-api:Invoke'],
+                resources,
+            }),
+        );
     }
 
 

@@ -136,6 +136,39 @@ distribution.addBehavior('/m-*', CloudFront.s3BucketOrigin('moderation', moderat
 });
 ```
 
+### Functions on Default Behavior
+
+You can also add CloudFront Functions to the default behavior (applies to all requests that don't match other path patterns):
+
+```typescript
+import { CloudFront } from '@designofadecade/cdk-constructs';
+
+// Create a custom function first
+const indexRewriteFunction = CloudFront.createFunction(
+  this,
+  'IndexRewrite',
+  `function handler(event) {
+    var request = event.request;
+    var uri = request.uri;
+    
+    if (uri.endsWith('/')) {
+      request.uri += 'index.html';
+    }
+    
+    return request;
+  }`
+);
+
+// Create distribution with function on default behavior
+const distribution = new CloudFront(this, 'Distribution', {
+  defaultBehavior: {
+    origin: CloudFront.s3BucketOrigin('origin', myBucket),
+    functions: [indexRewriteFunction], // Add functions to default behavior
+  },
+  stack: { id: 'my-app', tags: [] },
+});
+```
+
 ### Function Event Types
 
 CloudFront Functions can run at different stages:
@@ -316,6 +349,236 @@ This ensures your distribution is accessible via both IPv4 and IPv6.
 - `distribution` - CloudFront distribution
 - `distributionId` - Distribution ID
 - `distributionDomainName` - CloudFront domain name
+- `responseHeadersPolicy` - Response headers policy (if configured)
+
+## Methods
+
+### `grantCreateInvalidation(grantee)`
+
+Grants permission to create CloudFront cache invalidations to a Lambda function, role, or other IAM principal. This is useful when you need to programmatically invalidate cached content after updates.
+
+```typescript
+import { CloudFront } from '@designofadecade/cdk-constructs';
+import { Function } from '@designofadecade/cdk-constructs';
+
+// Create CloudFront distribution
+const cdn = new CloudFront(this, 'CDN', {
+  defaultBehavior: {
+    origin: CloudFront.s3BucketOrigin('origin', bucket),
+  },
+  stack: { id: 'my-app', tags: [] },
+});
+
+// Create a Lambda function that needs to invalidate cache
+const imageProcessor = new Function(this, 'ImageProcessor', {
+  name: 'image-processor',
+  entry: './src/handlers/process-image.ts',
+  stack: { id: 'my-app', tags: [] },
+});
+
+// Grant invalidation permission
+cdn.grantCreateInvalidation(imageProcessor.function);
+```
+
+**Common use cases:**
+- Invalidate cache after uploading new content to S3
+- Clear cache after CMS content updates
+- Refresh cache for updated API responses
+- Force cache refresh for hotfixes
+
+**Example Lambda function using invalidation:**
+```typescript
+import { CloudFrontClient, CreateInvalidationCommand } from '@aws-sdk/client-cloudfront';
+
+const cloudfront = new CloudFrontClient({});
+
+export async function handler(event) {
+  await cloudfront.send(new CreateInvalidationCommand({
+    DistributionId: process.env.DISTRIBUTION_ID,
+    InvalidationBatch: {
+      CallerReference: Date.now().toString(),
+      Paths: {
+        Quantity: 1,
+        Items: ['/images/*'],
+      },
+    },
+  }));
+  
+  return { statusCode: 200, body: 'Cache invalidated' };
+}
+```
+
+### `addBehavior(pathPattern, origin, options?)`
+
+Adds a custom behavior to the distribution for a specific path pattern.
+
+### `addHttpBehavior(pathPattern, domainName, options)`
+
+Adds a behavior with an HTTP origin for API routes or external services.
+
+### `addFunctionBehavior(pathPattern, functionConstruct, options)`
+
+Adds a behavior with a Lambda Function URL origin.
+
+### `addRoute53Records(hostedZone, recordNames)`
+
+Adds DNS records pointing to the CloudFront distribution (creates both A and AAAA records).
+
+## Custom Cache Policies
+
+CloudFront's default cache policies work well for most use cases, but sometimes you need fine-grained control over what gets cached. Use `CloudFront.createCachePolicy()` to create custom cache policies with specific query string, cookie, and header behaviors.
+
+### Creating Custom Cache Policies
+
+```typescript
+import { CloudFront } from '@designofadecade/cdk-constructs';
+
+// Create a cache policy for API with query string caching
+const apiCachePolicy = CloudFront.createCachePolicy(this, 'ApiCachePolicy', {
+  name: 'api-query-cache-policy',
+  comment: 'API cache policy with query allow-list',
+  queryStrings: ['next', 'q'], // Only these query params affect caching
+  cookies: 'none',
+  headers: 'none',
+  minTtl: 0,
+  defaultTtl: 0,
+  maxTtl: 1,
+  enableAcceptEncodingBrotli: true,
+  enableAcceptEncodingGzip: true,
+});
+
+// Use the cache policy in a behavior
+const cdn = new CloudFront(this, 'CDN', {
+  defaultBehavior: {
+    origin: CloudFront.s3BucketOrigin('origin', bucket),
+  },
+  stack: { id: 'my-app', tags: [] },
+});
+
+cdn.addHttpBehavior('/api/*', 'api.example.com', {
+  cachePolicy: apiCachePolicy,
+  customHeaders: {
+    'x-origin-verify': 'secret-value',
+  },
+});
+```
+
+### Cache Policy Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `name` | `string` | Required | Name for the cache policy |
+| `comment` | `string` | - | Description of the policy |
+| `queryStrings` | `'none' \| 'all' \| string[]` | `'none'` | Which query strings to include in cache key |
+| `cookies` | `'none' \| 'all' \| string[]` | `'none'` | Which cookies to include in cache key |
+| `headers` | `'none' \| string[]` | `'none'` | Which headers to include in cache key |
+| `minTtl` | `number` | `0` | Minimum TTL in seconds |
+| `defaultTtl` | `number` | `86400` | Default TTL in seconds (1 day) |
+| `maxTtl` | `number` | `31536000` | Maximum TTL in seconds (1 year) |
+| `enableAcceptEncodingBrotli` | `boolean` | `true` | Enable Brotli compression |
+| `enableAcceptEncodingGzip` | `boolean` | `true` | Enable Gzip compression |
+
+### Query String Behaviors
+
+```typescript
+// Don't include query strings in cache key (all requests cache together)
+queryStrings: 'none'
+
+// Include all query strings in cache key (each combo caches separately)
+queryStrings: 'all'
+
+// Include only specific query strings (allow-list)
+queryStrings: ['page', 'sort', 'filter']
+```
+
+### Cookie Behaviors
+
+```typescript
+// Don't include cookies in cache key
+cookies: 'none'
+
+// Include all cookies in cache key
+cookies: 'all'
+
+// Include only specific cookies (allow-list)
+cookies: ['session_id', 'user_preferences']
+```
+
+### Header Behaviors
+
+```typescript
+// Don't include headers in cache key
+headers: 'none'
+
+// Include specific headers (allow-list)
+headers: ['Accept', 'Accept-Language', 'CloudFront-Viewer-Country']
+```
+
+### Common Cache Policy Patterns
+
+**API with pagination:**
+```typescript
+const apiCache = CloudFront.createCachePolicy(this, 'ApiPagination', {
+  name: 'api-pagination',
+  queryStrings: ['page', 'limit', 'offset'],
+  defaultTtl: 300, // 5 minutes
+  maxTtl: 3600,    // 1 hour
+});
+```
+
+**Search results:**
+```typescript
+const searchCache = CloudFront.createCachePolicy(this, 'SearchCache', {
+  name: 'search-cache',
+  queryStrings: ['q', 'filter', 'sort'],
+  defaultTtl: 600, // 10 minutes
+});
+```
+
+**No caching (always fresh):**
+```typescript
+const noCache = CloudFront.createCachePolicy(this, 'NoCache', {
+  name: 'no-cache',
+  minTtl: 0,
+  defaultTtl: 0,
+  maxTtl: 1,
+});
+```
+
+**User-specific content:**
+```typescript
+const userCache = CloudFront.createCachePolicy(this, 'UserCache', {
+  name: 'user-cache',
+  cookies: ['session_id'],
+  queryStrings: ['user_id'],
+  defaultTtl: 300,
+});
+```
+
+### Using Cache Policies with Behaviors
+
+All behavior methods (`addBehavior`, `addHttpBehavior`, `addFunctionBehavior`) support custom cache policies:
+
+```typescript
+// With addBehavior
+cdn.addBehavior('/custom/*', origin, {
+  cachePolicy: customCachePolicy,
+});
+
+// With addHttpBehavior
+cdn.addHttpBehavior('/api/*', 'api.example.com', {
+  cachePolicy: apiCachePolicy,
+  customHeaders: { 'x-api-key': 'secret' },
+});
+
+// With addFunctionBehavior
+cdn.addFunctionBehavior('/lambda/*', lambdaFunction, {
+  cachePolicy: lambdaCachePolicy,
+  stack: { id: 'my-app' },
+});
+```
+
+**Note:** If you provide a custom `cachePolicy`, the `cachingDisabled` option is ignored.
 
 ## Best Practices
 

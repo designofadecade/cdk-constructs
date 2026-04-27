@@ -19,9 +19,13 @@ import {
     Function as CfFunction,
     FunctionCode,
     FunctionEventType,
+    CacheQueryStringBehavior,
+    CacheCookieBehavior,
+    CacheHeaderBehavior,
     type IOrigin,
     type IDistribution,
     type IResponseHeadersPolicy,
+    type ICachePolicy,
     type IKeyGroup,
     type FunctionAssociation,
     type ErrorResponse,
@@ -31,7 +35,7 @@ import type { ICertificate } from 'aws-cdk-lib/aws-certificatemanager';
 import { HttpOrigin, S3BucketOrigin as S3Origin, FunctionUrlOrigin } from 'aws-cdk-lib/aws-cloudfront-origins';
 import { RecordTarget, ARecord, AaaaRecord, type IHostedZone } from 'aws-cdk-lib/aws-route53';
 import { CloudFrontTarget } from 'aws-cdk-lib/aws-route53-targets';
-import { ServicePrincipal } from 'aws-cdk-lib/aws-iam';
+import { ServicePrincipal, type IGrantable } from 'aws-cdk-lib/aws-iam';
 import type { IBucket } from 'aws-cdk-lib/aws-s3';
 import type { Function as LambdaFunction } from './Function.js';
 import type { Waf } from './Waf.js';
@@ -79,6 +83,11 @@ export interface DefaultBehaviorConfig {
      * Optional response headers policy
      */
     readonly responseHeadersPolicy?: IResponseHeadersPolicy;
+
+    /**
+     * Optional CloudFront functions to associate
+     */
+    readonly functions?: ReadonlyArray<FunctionAssociation>;
 }
 
 /**
@@ -89,6 +98,12 @@ export interface BehaviorOptions {
      * Whether to disable caching
      */
     readonly cachingDisabled?: boolean;
+
+    /**
+     * Optional custom cache policy
+     * If provided, takes precedence over cachingDisabled
+     */
+    readonly cachePolicy?: ICachePolicy;
 
     /**
      * Optional CloudFront functions to associate
@@ -206,6 +221,80 @@ export interface S3BucketOriginOptions {
 }
 
 /**
+ * Cache policy configuration options
+ */
+export interface CachePolicyOptions {
+    /**
+     * Name for the cache policy
+     */
+    readonly name: string;
+
+    /**
+     * Optional comment describing the policy
+     */
+    readonly comment?: string;
+
+    /**
+     * Query string behavior
+     * - 'none' - Don't include query strings in cache key
+     * - 'all' - Include all query strings in cache key
+     * - string[] - Include only specified query strings in cache key (allow-list)
+     * 
+     * @default 'none'
+     */
+    readonly queryStrings?: 'none' | 'all' | ReadonlyArray<string>;
+
+    /**
+     * Cookie behavior
+     * - 'none' - Don't include cookies in cache key
+     * - 'all' - Include all cookies in cache key
+     * - string[] - Include only specified cookies in cache key (allow-list)
+     * 
+     * @default 'none'
+     */
+    readonly cookies?: 'none' | 'all' | ReadonlyArray<string>;
+
+    /**
+     * Header behavior
+     * - 'none' - Don't include headers in cache key
+     * - string[] - Include only specified headers in cache key (allow-list)
+     * 
+     * @default 'none'
+     */
+    readonly headers?: 'none' | ReadonlyArray<string>;
+
+    /**
+     * Minimum TTL in seconds
+     * @default 0
+     */
+    readonly minTtl?: number;
+
+    /**
+     * Default TTL in seconds
+     * @default 86400 (1 day)
+     */
+    readonly defaultTtl?: number;
+
+    /**
+     * Maximum TTL in seconds
+     * @default 31536000 (1 year)
+     */
+    readonly maxTtl?: number;
+
+    /**
+     * Enable Brotli compression
+     * @default true
+     */
+    readonly enableAcceptEncodingBrotli?: boolean;
+
+    /**
+     * Enable Gzip compression
+     * @default true
+     */
+    readonly enableAcceptEncodingGzip?: boolean;
+}
+
+/**
  * Properties for configuring CloudFront distribution
  */
 export interface CloudFrontProps {
@@ -298,7 +387,18 @@ export interface CloudFrontProps {
  *   stack: { id: 'my-app', tags: [] },
  * });
  * 
- * // Create CloudFront with WAF
+ * // Create a custom function for default behavior
+ * const customFunction = CloudFront.createFunction(
+ *   this,
+ *   'CustomFunction',
+ *   `function handler(event) {
+ *     var request = event.request;
+ *     // Custom logic here
+ *     return request;
+ *   }`
+ * );
+ * 
+ * // Create CloudFront with WAF and function on default behavior
  * const cdn = new CloudFront(this, 'CDN', {
  *   name: 'my-app',
  *   domain: {
@@ -314,6 +414,7 @@ export interface CloudFrontProps {
  *     responseHeadersPolicy: CloudFront.responseHeaderPolicy(this, 'Policy', {
  *       name: 'my-policy',
  *     }),
+ *     functions: [customFunction], // Add functions to default behavior
  *   },
  *   waf, // Pass WAF construct directly
  *   stack: { id: 'my-app', tags: [] },
@@ -322,7 +423,7 @@ export interface CloudFrontProps {
  * // Add API behavior
  * cdn.addHttpBehavior('/api/*', apiDomain, { cachingDisabled: true });
  * 
- * // Add SPA rewrite function
+ * // Add SPA rewrite function to a specific path
  * cdn.addBehavior('/app/*', appOrigin, {
  *   functions: [cdn.getSpaRewriteFunction('/app')],
  * });
@@ -361,6 +462,7 @@ export class CloudFront extends Construct {
                 viewerProtocolPolicy: ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
                 responseHeadersPolicy: this.#responseHeadersPolicy,
                 trustedKeyGroups: props.trustedKeyGroups ? [...props.trustedKeyGroups] : undefined,
+                functionAssociations: props.defaultBehavior.functions ? [...props.defaultBehavior.functions] : undefined,
             },
             errorResponses: props.errorResponses ? [...props.errorResponses] : [],
         });
@@ -424,6 +526,32 @@ export class CloudFront extends Construct {
     }
 
     /**
+     * Grants permission to create CloudFront cache invalidations
+     * 
+     * This is useful when you need a Lambda function or other service to invalidate
+     * the CloudFront cache (e.g., after uploading new content to S3).
+     * 
+     * @param grantee - The principal (Lambda function, role, etc.) to grant permissions to
+     * 
+     * @example
+     * ```typescript
+     * const cdn = new CloudFront(this, 'CDN', { ... });
+     * 
+     * const imageProcessor = new Function(this, 'ImageProcessor', {
+     *   name: 'image-processor',
+     *   entry: './src/processor.ts',
+     *   stack: { id: 'my-app', tags: [] },
+     * });
+     * 
+     * // Grant the function permission to invalidate the CloudFront cache
+     * cdn.grantCreateInvalidation(imageProcessor.function);
+     * ```
+     */
+    grantCreateInvalidation(grantee: IGrantable): void {
+        this.#distribution.grantCreateInvalidation(grantee);
+    }
+
+    /**
      * Adds a behavior to the distribution with a custom origin
      * 
      * @param pathPattern - The path pattern (e.g., '/api/*', '/images/*')
@@ -431,8 +559,10 @@ export class CloudFront extends Construct {
      * @param props - Optional behavior configuration
      */
     addBehavior(pathPattern: string, origin: IOrigin, props: BehaviorOptions = {}): void {
+        const cachePolicy = props.cachePolicy ?? (props.cachingDisabled === true ? CachePolicy.CACHING_DISABLED : CachePolicy.CACHING_OPTIMIZED);
+
         this.#distribution.addBehavior(pathPattern, origin, {
-            cachePolicy: props.cachingDisabled === true ? CachePolicy.CACHING_DISABLED : CachePolicy.CACHING_OPTIMIZED,
+            cachePolicy,
             allowedMethods: AllowedMethods.ALLOW_ALL,
             originRequestPolicy: OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER,
             viewerProtocolPolicy: ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
@@ -450,6 +580,8 @@ export class CloudFront extends Construct {
      * @param props - Behavior configuration
      */
     addHttpBehavior(pathPattern: string, domainName: string, props: HttpBehaviorOptions): void {
+        const cachePolicy = props.cachePolicy ?? (props.cachingDisabled === true ? CachePolicy.CACHING_DISABLED : CachePolicy.CACHING_OPTIMIZED);
+
         this.#distribution.addBehavior(
             pathPattern,
             new HttpOrigin(domainName.replace(/https:\/\//, ''), {
@@ -457,7 +589,7 @@ export class CloudFront extends Construct {
                 customHeaders: props.customHeaders ?? {},
             }),
             {
-                cachePolicy: props.cachingDisabled === true ? CachePolicy.CACHING_DISABLED : CachePolicy.CACHING_OPTIMIZED,
+                cachePolicy,
                 allowedMethods: AllowedMethods.ALLOW_ALL,
                 originRequestPolicy: OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER,
                 viewerProtocolPolicy: ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
@@ -487,8 +619,10 @@ export class CloudFront extends Construct {
             throw new Error('Function must have a URL configured to use addFunctionBehavior');
         }
 
+        const cachePolicy = props.cachePolicy ?? (props.cachingDisabled === true ? CachePolicy.CACHING_DISABLED : CachePolicy.CACHING_OPTIMIZED);
+
         this.#distribution.addBehavior(pathPattern, new FunctionUrlOrigin(functionConstruct.functionUrl), {
-            cachePolicy: props.cachingDisabled === true ? CachePolicy.CACHING_DISABLED : CachePolicy.CACHING_OPTIMIZED,
+            cachePolicy,
             allowedMethods: AllowedMethods.ALLOW_ALL,
             originRequestPolicy: OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER,
             viewerProtocolPolicy: ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
@@ -683,6 +817,92 @@ export class CloudFront extends Construct {
                     override: true,
                 },
             },
+        });
+    }
+
+    /**
+     * Creates a custom cache policy with fine-grained control over caching behavior
+     * 
+     * This is useful when you need to control which query strings, cookies, or headers
+     * are included in the cache key, or when you need custom TTL values.
+     * 
+     * @param scope - The construct scope
+     * @param id - Unique identifier for the cache policy
+     * @param options - Cache policy configuration
+     * @returns Configured CachePolicy
+     * 
+     * @example
+     * ```typescript
+     * // Create a cache policy for API with query string caching
+     * const apiCachePolicy = CloudFront.createCachePolicy(this, 'ApiCachePolicy', {
+     *   name: 'api-query-cache-policy',
+     *   comment: 'API cache policy with query allow-list',
+     *   queryStrings: ['next', 'q'], // Only cache based on these query params
+     *   cookies: 'none',
+     *   headers: 'none',
+     *   minTtl: 0,
+     *   defaultTtl: 0,
+     *   maxTtl: 1,
+     *   enableAcceptEncodingBrotli: true,
+     *   enableAcceptEncodingGzip: true,
+     * });
+     * 
+     * // Create a cache policy that includes all query strings
+     * const fullCachePolicy = CloudFront.createCachePolicy(this, 'FullCache', {
+     *   name: 'full-cache-policy',
+     *   queryStrings: 'all',
+     *   cookies: ['session', 'user_id'],
+     *   headers: ['Accept', 'Accept-Language'],
+     *   defaultTtl: 3600,
+     * });
+     * 
+     * // Use the cache policy in a behavior
+     * cdn.addHttpBehavior('/api/*', apiDomain, {
+     *   cachePolicy: apiCachePolicy,
+     *   customHeaders: { 'x-origin-verify': 'secret' },
+     * });
+     * ```
+     */
+    static createCachePolicy(scope: Construct, id: string, options: CachePolicyOptions): ICachePolicy {
+        // Handle query string behavior
+        let queryStringBehavior: CacheQueryStringBehavior;
+        if (!options.queryStrings || options.queryStrings === 'none') {
+            queryStringBehavior = CacheQueryStringBehavior.none();
+        } else if (options.queryStrings === 'all') {
+            queryStringBehavior = CacheQueryStringBehavior.all();
+        } else {
+            queryStringBehavior = CacheQueryStringBehavior.allowList(...options.queryStrings);
+        }
+
+        // Handle cookie behavior
+        let cookieBehavior: CacheCookieBehavior;
+        if (!options.cookies || options.cookies === 'none') {
+            cookieBehavior = CacheCookieBehavior.none();
+        } else if (options.cookies === 'all') {
+            cookieBehavior = CacheCookieBehavior.all();
+        } else {
+            cookieBehavior = CacheCookieBehavior.allowList(...options.cookies);
+        }
+
+        // Handle header behavior
+        let headerBehavior: CacheHeaderBehavior;
+        if (!options.headers || options.headers === 'none') {
+            headerBehavior = CacheHeaderBehavior.none();
+        } else {
+            headerBehavior = CacheHeaderBehavior.allowList(...options.headers);
+        }
+
+        return new CachePolicy(scope, id, {
+            cachePolicyName: options.name,
+            comment: options.comment,
+            queryStringBehavior,
+            cookieBehavior,
+            headerBehavior,
+            minTtl: options.minTtl !== undefined ? Duration.seconds(options.minTtl) : Duration.seconds(0),
+            defaultTtl: options.defaultTtl !== undefined ? Duration.seconds(options.defaultTtl) : Duration.days(1),
+            maxTtl: options.maxTtl !== undefined ? Duration.seconds(options.maxTtl) : Duration.days(365),
+            enableAcceptEncodingBrotli: options.enableAcceptEncodingBrotli ?? true,
+            enableAcceptEncodingGzip: options.enableAcceptEncodingGzip ?? true,
         });
     }
 

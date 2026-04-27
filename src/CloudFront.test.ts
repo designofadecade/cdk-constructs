@@ -4,6 +4,7 @@ import { Template, Match } from 'aws-cdk-lib/assertions';
 import { Certificate } from 'aws-cdk-lib/aws-certificatemanager';
 import { Bucket } from 'aws-cdk-lib/aws-s3';
 import { HostedZone } from 'aws-cdk-lib/aws-route53';
+import { Role, ServicePrincipal } from 'aws-cdk-lib/aws-iam';
 import { CloudFront } from '../src/CloudFront.js';
 
 describe('CloudFront', () => {
@@ -398,6 +399,186 @@ describe('CloudFront', () => {
         template.hasResourceProperties('AWS::Route53::RecordSet', {
             Type: 'AAAA',
             Name: 'example.com.',
+        });
+    });
+
+    it('adds CloudFront functions to default behavior', () => {
+        const app = new App();
+        const stack = new Stack(app, 'TestStack');
+        const bucket = new Bucket(stack, 'TestBucket');
+
+        const customFunction = CloudFront.createFunction(
+            stack,
+            'TestFunction',
+            `function handler(event) {
+                var request = event.request;
+                return request;
+            }`,
+        );
+
+        new CloudFront(stack, 'TestDistribution', {
+            defaultBehavior: {
+                origin: CloudFront.s3BucketOrigin('origin', bucket),
+                functions: [customFunction],
+            },
+            stack: { id: 'test', tags: [] },
+        });
+
+        const template = Template.fromStack(stack);
+
+        // Should create the CloudFront function
+        template.resourceCountIs('AWS::CloudFront::Function', 1);
+
+        // Default behavior should have function association
+        template.hasResourceProperties('AWS::CloudFront::Distribution', {
+            DistributionConfig: {
+                DefaultCacheBehavior: Match.objectLike({
+                    FunctionAssociations: Match.arrayWith([
+                        Match.objectLike({
+                            EventType: 'viewer-request',
+                        }),
+                    ]),
+                }),
+            },
+        });
+    });
+
+    it('grants CloudFront invalidation permissions', () => {
+        const app = new App();
+        const stack = new Stack(app, 'TestStack');
+        const bucket = new Bucket(stack, 'TestBucket');
+
+        const distribution = new CloudFront(stack, 'TestDistribution', {
+            defaultBehavior: {
+                origin: CloudFront.s3BucketOrigin('origin', bucket),
+            },
+            stack: { id: 'test', tags: [] },
+        });
+
+        const role = new Role(stack, 'TestRole', {
+            assumedBy: new ServicePrincipal('lambda.amazonaws.com'),
+        });
+
+        distribution.grantCreateInvalidation(role);
+
+        const template = Template.fromStack(stack);
+
+        // Should create IAM policy allowing cloudfront:CreateInvalidation
+        template.hasResourceProperties('AWS::IAM::Policy', {
+            PolicyDocument: {
+                Statement: Match.arrayWith([
+                    Match.objectLike({
+                        Action: 'cloudfront:CreateInvalidation',
+                        Effect: 'Allow',
+                        Resource: {
+                            'Fn::Join': Match.arrayWith([
+                                Match.arrayWith([
+                                    Match.objectLike({
+                                        Ref: Match.stringLikeRegexp('TestDistribution'),
+                                    }),
+                                ]),
+                            ]),
+                        },
+                    }),
+                ]),
+            },
+        });
+    });
+
+    it('creates custom cache policy with query string allow-list', () => {
+        const app = new App();
+        const stack = new Stack(app, 'TestStack');
+        const bucket = new Bucket(stack, 'TestBucket');
+
+        const cachePolicy = CloudFront.createCachePolicy(stack, 'ApiCachePolicy', {
+            name: 'api-query-cache-policy',
+            comment: 'API cache policy with query allow-list',
+            queryStrings: ['next', 'q'],
+            cookies: 'none',
+            headers: 'none',
+            minTtl: 0,
+            defaultTtl: 0,
+            maxTtl: 1,
+            enableAcceptEncodingBrotli: true,
+            enableAcceptEncodingGzip: true,
+        });
+
+        const distribution = new CloudFront(stack, 'TestDistribution', {
+            defaultBehavior: {
+                origin: CloudFront.s3BucketOrigin('origin', bucket),
+            },
+            stack: { id: 'test', tags: [] },
+        });
+
+        distribution.addHttpBehavior('/api/*', 'api.example.com', {
+            cachePolicy,
+        });
+
+        const template = Template.fromStack(stack);
+
+        // Should create custom cache policy
+        template.hasResourceProperties('AWS::CloudFront::CachePolicy', {
+            CachePolicyConfig: {
+                Name: 'api-query-cache-policy',
+                Comment: 'API cache policy with query allow-list',
+                MinTTL: 0,
+                DefaultTTL: 0,
+                MaxTTL: 1,
+                ParametersInCacheKeyAndForwardedToOrigin: {
+                    QueryStringsConfig: {
+                        QueryStringBehavior: 'whitelist',
+                        QueryStrings: ['next', 'q'],
+                    },
+                    CookiesConfig: {
+                        CookieBehavior: 'none',
+                    },
+                    HeadersConfig: {
+                        HeaderBehavior: 'none',
+                    },
+                    EnableAcceptEncodingBrotli: true,
+                    EnableAcceptEncodingGzip: true,
+                },
+            },
+        });
+    });
+
+    it('uses custom cache policy in behavior', () => {
+        const app = new App();
+        const stack = new Stack(app, 'TestStack');
+        const bucket = new Bucket(stack, 'TestBucket');
+
+        const cachePolicy = CloudFront.createCachePolicy(stack, 'CustomCache', {
+            name: 'custom-cache',
+            queryStrings: 'all',
+            cookies: ['session'],
+            defaultTtl: 3600,
+        });
+
+        const distribution = new CloudFront(stack, 'TestDistribution', {
+            defaultBehavior: {
+                origin: CloudFront.s3BucketOrigin('origin', bucket),
+            },
+            stack: { id: 'test', tags: [] },
+        });
+
+        distribution.addBehavior('/custom/*', CloudFront.s3BucketOrigin('custom', bucket), {
+            cachePolicy,
+        });
+
+        const template = Template.fromStack(stack);
+
+        // Should use the custom cache policy in the behavior
+        template.hasResourceProperties('AWS::CloudFront::Distribution', {
+            DistributionConfig: {
+                CacheBehaviors: Match.arrayWith([
+                    Match.objectLike({
+                        PathPattern: '/custom/*',
+                        CachePolicyId: {
+                            Ref: Match.stringLikeRegexp('CustomCache'),
+                        },
+                    }),
+                ]),
+            },
         });
     });
 });

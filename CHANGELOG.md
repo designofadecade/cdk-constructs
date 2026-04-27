@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.34.0] - 2026-04-27
+
+### Changed
+- **GuardDutyMalwareProtection: IAM permissions**
+  - Split EventBridge permissions into 3 separate policies for clarity and compliance
+  - `events:DescribeRule` and `events:ListTargetsByRule` no longer have ManagedBy condition
+  - Added `s3:GetBucketLocation` and `s3:GetBucketAcl` to bucket-level permissions
+  - Separated S3 object permissions into distinct policies: tagging, validation object, and read operations
+  - Added `project` tag to the malware protection plan resource
+  - Aligns with AWS GuardDuty Malware Protection documented IAM requirements
+
+### Added
+- **CloudFront: Custom cache policies**
+  - New `CloudFront.createCachePolicy()` static method for creating custom cache policies with fine-grained control over caching behavior
+  - Configure query string, cookie, and header inclusion in cache keys (allow-list, all, or none)
+  - Set custom TTL values (minTtl, defaultTtl, maxTtl)
+  - Control compression settings (Brotli and Gzip)
+  - All behavior methods (`addBehavior`, `addHttpBehavior`, `addFunctionBehavior`) now support optional `cachePolicy` parameter
+
+- **CloudFront: Functions on default behavior**
+  - Added `functions?: ReadonlyArray<FunctionAssociation>` prop to `DefaultBehaviorConfig`
+  - CloudFront Functions can now be attached to the default behavior (applies to all requests that don't match other path patterns)
+  - Previously, functions could only be added to additional behaviors via `addBehavior()`
+
+- **CloudFront: Cache invalidation permissions**
+  - New `grantCreateInvalidation(grantee)` method to grant IAM permissions for creating cache invalidations
+  - Useful for Lambda functions or other services that need to invalidate CloudFront cache after content updates
+
 ## [1.33.0] - 2026-04-27
 
 ### Added
