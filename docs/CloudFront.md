@@ -20,7 +20,7 @@ import { CloudFront } from '@designofadecade/cdk-constructs';
 const distribution = new CloudFront(this, 'Distribution', {
   name: 'my-distribution',
   defaultBehavior: {
-    origin: CloudFront.S3BucketOrigin('origin', myBucket),
+    origin: CloudFront.s3BucketOrigin('origin', myBucket),
   },
   stack: { id: 'my-app', tags: [] },
 });
@@ -46,7 +46,7 @@ const logBucket = new S3Bucket(this, 'CloudFrontLogs', {
 const distribution = new CloudFront(this, 'Distribution', {
   name: 'my-distribution',
   defaultBehavior: {
-    origin: CloudFront.S3BucketOrigin('origin', myBucket),
+    origin: CloudFront.s3BucketOrigin('origin', myBucket),
   },
   logging: {
     bucket: logBucket.bucket,
@@ -83,6 +83,218 @@ CloudFront access logs include:
 3. **Analyze logs** - Use Amazon Athena or CloudWatch Logs Insights for analysis
 4. **Secure the log bucket** - Restrict access to authorized personnel only
 5. **Consider costs** - Logging generates storage costs based on traffic volume
+
+## Custom CloudFront Functions
+
+CloudFront Functions are lightweight JavaScript functions that run on CloudFront edge locations. They're ideal for simple request/response transformations with low latency.
+
+### Creating Custom Functions
+
+Use `CloudFront.createFunction()` to create custom CloudFront Functions that can be assigned to behaviors:
+
+```typescript
+import { CloudFront } from '@designofadecade/cdk-constructs';
+import { FunctionEventType } from 'aws-cdk-lib/aws-cloudfront';
+
+// Create a custom function to transform URIs
+const moderationFunction = CloudFront.createFunction(
+  this,
+  'ModerationBehaviorFunction',
+  `function handler(event) {
+    var request = event.request;
+    var uri = request.uri;
+    var prefix = '/m-7f3d9e2a8c4b';
+    
+    if (!uri.includes('/res/')) {
+      uri = uri.toLowerCase();
+      var relative = uri.startsWith(prefix) ? uri.slice(prefix.length) : uri;
+      
+      if (relative === '' || relative === '/') {
+        request.uri = prefix + '/index.html';
+      } else if (!relative.includes('.')) {
+        request.uri = prefix + '/' + relative.replace(/^\\//, '') + '.html';
+      } else {
+        request.uri = uri;
+      }
+    }
+    
+    return request;
+  }`
+);
+
+// Create distribution
+const distribution = new CloudFront(this, 'Distribution', {
+  defaultBehavior: {
+    origin: CloudFront.s3BucketOrigin('origin', myBucket),
+  },
+  stack: { id: 'my-app', tags: [] },
+});
+
+// Add behavior with custom function
+distribution.addBehavior('/m-*', CloudFront.s3BucketOrigin('moderation', moderationBucket), {
+  functions: [moderationFunction],
+});
+```
+
+### Function Event Types
+
+CloudFront Functions can run at different stages:
+
+```typescript
+// Viewer Request (default) - runs before CloudFront cache lookup
+const requestFunction = CloudFront.createFunction(
+  this,
+  'RequestFunction',
+  `function handler(event) { return event.request; }`
+);
+
+// Viewer Response - runs after receiving response from origin
+const responseFunction = CloudFront.createFunction(
+  this,
+  'ResponseFunction',
+  `function handler(event) {
+    var response = event.response;
+    response.headers['x-custom-header'] = { value: 'custom-value' };
+    return response;
+  }`,
+  FunctionEventType.VIEWER_RESPONSE
+);
+```
+
+### Use Cases for Custom Functions
+
+1. **URL Rewriting** - Transform request URIs to match your origin structure
+2. **Header Manipulation** - Add, modify, or remove HTTP headers
+3. **Authentication** - Validate tokens or signed cookies
+4. **A/B Testing** - Route requests to different origins based on cookies
+5. **Redirects** - Implement custom redirect logic
+6. **Normalization** - Standardize URLs (e.g., lowercase, remove query strings)
+
+### Built-in Functions
+
+The construct also provides built-in helper functions:
+
+```typescript
+// Index rewriting - adds /index.html to directory paths
+const indexFunction = distribution.getIndexRewriteFunction();
+
+// SPA routing - rewrites non-file requests to /index.html
+const spaFunction = distribution.getSpaRewriteFunction('/app');
+
+// Use in behaviors
+distribution.addBehavior('/app/*', appOrigin, {
+  functions: [spaFunction],
+});
+```
+
+### Function Limitations
+
+CloudFront Functions have some constraints:
+- Maximum execution time: < 1ms
+- Memory limit: 2MB
+- Cannot make network requests
+- Limited to JavaScript ES5.1
+- Best for simple, fast transformations
+
+For complex logic or external API calls, consider using Lambda@Edge instead.
+
+## Route 53 DNS Records
+
+Easily add Route 53 DNS records that point to your CloudFront distribution. The construct automatically creates both A and AAAA records for IPv4 and IPv6 support.
+
+### Automatic DNS Configuration
+
+Configure DNS records during distribution creation:
+
+```typescript
+import { CloudFront } from '@designofadecade/cdk-constructs';
+import { HostedZone } from 'aws-cdk-lib/aws-route53';
+
+const hostedZone = HostedZone.fromLookup(this, 'Zone', {
+  domainName: 'example.com',
+});
+
+const distribution = new CloudFront(this, 'Distribution', {
+  name: 'my-distribution',
+  domain: {
+    names: ['example.com', 'www.example.com'],
+    certificate: myCertificate,
+    dns: {
+      hostedZone,
+      records: ['example.com', 'www.example.com'], // Creates A and AAAA for each
+    },
+  },
+  defaultBehavior: {
+    origin: CloudFront.s3BucketOrigin('origin', myBucket),
+  },
+  stack: { id: 'my-app', tags: [] },
+});
+```
+
+### Adding DNS Records Manually
+
+Use the `addRoute53Records()` helper method to add DNS records after distribution creation:
+
+```typescript
+import { CloudFront } from '@designofadecade/cdk-constructs';
+import { HostedZone } from 'aws-cdk-lib/aws-route53';
+
+const hostedZone = HostedZone.fromLookup(this, 'Zone', {
+  domainName: 'example.com',
+});
+
+const distribution = new CloudFront(this, 'Distribution', {
+  defaultBehavior: {
+    origin: CloudFront.s3BucketOrigin('origin', myBucket),
+  },
+  stack: { id: 'my-app', tags: [] },
+});
+
+// Add single record (creates both A and AAAA)
+distribution.addRoute53Records(hostedZone, 'www.example.com');
+
+// Add multiple records at once
+distribution.addRoute53Records(hostedZone, [
+  'example.com',
+  'www.example.com',
+  'cdn.example.com',
+]);
+```
+
+### Multi-Language Domain Example
+
+Here's a practical example for multi-language sites:
+
+```typescript
+const stagingZone = HostedZone.fromLookup(this, 'StagingZone', {
+  domainName: 'staging.example.com',
+});
+
+const distribution = new CloudFront(this, 'StagingDistribution', {
+  domain: {
+    names: ['en.staging.example.com', 'fr.staging.example.com'],
+    certificate: stagingCertificate,
+  },
+  defaultBehavior: {
+    origin: CloudFront.s3BucketOrigin('origin', myBucket),
+  },
+  stack: { id: 'staging', tags: [] },
+});
+
+// Add DNS records for both English and French domains
+distribution.addRoute53Records(stagingZone, [
+  'en.staging.example.com',
+  'fr.staging.example.com',
+]);
+```
+
+### What Gets Created
+
+For each record name, the helper automatically creates:
+- **A Record** - IPv4 alias pointing to CloudFront
+- **AAAA Record** - IPv6 alias pointing to CloudFront
+
+This ensures your distribution is accessible via both IPv4 and IPv6.
 
 ## Properties
 

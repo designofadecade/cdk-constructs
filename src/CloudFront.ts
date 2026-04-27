@@ -29,7 +29,7 @@ import {
 } from 'aws-cdk-lib/aws-cloudfront';
 import type { ICertificate } from 'aws-cdk-lib/aws-certificatemanager';
 import { HttpOrigin, S3BucketOrigin as S3Origin, FunctionUrlOrigin } from 'aws-cdk-lib/aws-cloudfront-origins';
-import { RecordTarget, ARecord, type IHostedZone } from 'aws-cdk-lib/aws-route53';
+import { RecordTarget, ARecord, AaaaRecord, type IHostedZone } from 'aws-cdk-lib/aws-route53';
 import { CloudFrontTarget } from 'aws-cdk-lib/aws-route53-targets';
 import { ServicePrincipal } from 'aws-cdk-lib/aws-iam';
 import type { IBucket } from 'aws-cdk-lib/aws-s3';
@@ -310,8 +310,8 @@ export interface CloudFrontProps {
  *     },
  *   },
  *   defaultBehavior: {
- *     origin: CloudFront.S3BucketOrigin('main', myBucket),
- *     responseHeadersPolicy: CloudFront.ResponseHeaderPolicy(this, 'Policy', {
+ *     origin: CloudFront.s3BucketOrigin('main', myBucket),
+ *     responseHeadersPolicy: CloudFront.responseHeaderPolicy(this, 'Policy', {
  *       name: 'my-policy',
  *     }),
  *   },
@@ -338,7 +338,7 @@ export class CloudFront extends Construct {
     constructor(scope: Construct, id: string, props: CloudFrontProps) {
         super(scope, id);
 
-        this.#responseHeadersPolicy = props.defaultBehavior.responseHeadersPolicy ?? CloudFront.ResponseHeaderPolicy(this, 'ResponseHeadersPolicy');
+        this.#responseHeadersPolicy = props.defaultBehavior.responseHeadersPolicy ?? CloudFront.responseHeaderPolicy(this, 'ResponseHeadersPolicy');
 
         // Extract WAF ARN if Waf construct is provided
         const webAclId = typeof props.waf === 'string' ? props.waf : props.waf?.webAclArn;
@@ -367,11 +367,7 @@ export class CloudFront extends Construct {
 
         if (props.domain?.dns) {
             props.domain.dns.records.forEach((recordName) => {
-                new ARecord(this, `CloudFrontAliasRecord${recordName}`, {
-                    zone: props.domain!.dns!.hostedZone,
-                    recordName,
-                    target: RecordTarget.fromAlias(new CloudFrontTarget(this.#distribution)),
-                });
+                this.addRoute53Records(props.domain!.dns!.hostedZone, recordName);
             });
         }
 
@@ -628,7 +624,7 @@ export class CloudFront extends Construct {
      * @param publicKeyIds - Array of public key IDs
      * @returns Configured KeyGroup
      */
-    static CreateKeyGroup(scope: Construct, id: string, publicKeyIds: string[]): IKeyGroup {
+    static createKeyGroup(scope: Construct, id: string, publicKeyIds: string[]): IKeyGroup {
         return new KeyGroup(scope, id, {
             items: publicKeyIds.map((keyId) => PublicKey.fromPublicKeyId(scope, `ImportedPublicKey${keyId}`, keyId)),
         });
@@ -642,7 +638,7 @@ export class CloudFront extends Construct {
      * @param props - Policy configuration
      * @returns Configured ResponseHeadersPolicy
      */
-    static ResponseHeaderPolicy(scope: Construct, name: string, props: ResponseHeaderPolicyOptions = {}): IResponseHeadersPolicy {
+    static responseHeaderPolicy(scope: Construct, name: string, props: ResponseHeaderPolicyOptions = {}): IResponseHeadersPolicy {
         let contentSecurityPolicy =
             props.contentSecurityPolicy ??
             `default-src 'none'; script-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self'; form-action 'self'; base-uri 'self'; manifest-src 'self'; upgrade-insecure-requests`;
@@ -691,12 +687,107 @@ export class CloudFront extends Construct {
     }
 
     /**
+     * Creates a custom CloudFront Function that can be assigned to behaviors
+     * 
+     * @param scope - The construct scope
+     * @param id - Unique identifier for the function
+     * @param code - Inline JavaScript code for the function
+     * @param eventType - When to execute the function (default: VIEWER_REQUEST)
+     * @returns Function association configuration
+     * 
+     * @example
+     * ```typescript
+     * const customFunction = CloudFront.createFunction(
+     *   this,
+     *   'ModerationBehaviorFunction',
+     *   `function handler(event) {
+     *     var request = event.request;
+     *     var uri = request.uri;
+     *     var prefix = '/m-7f3d9e2a8c4b';
+     *     
+     *     if (!uri.includes('/res/')) {
+     *       uri = uri.toLowerCase();
+     *       var relative = uri.startsWith(prefix) ? uri.slice(prefix.length) : uri;
+     *       
+     *       if (relative === '' || relative === '/') {
+     *         request.uri = prefix + '/index.html';
+     *       } else if (!relative.includes('.')) {
+     *         request.uri = prefix + '/' + relative.replace(/^\\//, '') + '.html';
+     *       } else {
+     *         request.uri = uri;
+     *       }
+     *     }
+     *     
+     *     return request;
+     *   }`
+     * );
+     * 
+     * cloudfront.addBehavior('/m-*', origin, {
+     *   functions: [customFunction],
+     * });
+     * ```
+     */
+    static createFunction(
+        scope: Construct,
+        id: string,
+        code: string,
+        eventType: FunctionEventType = FunctionEventType.VIEWER_REQUEST,
+    ): FunctionAssociation {
+        const cfFunction = new CfFunction(scope, id, {
+            code: FunctionCode.fromInline(code),
+        });
+
+        return {
+            function: cfFunction,
+            eventType,
+        };
+    }
+
+    /**
+     * Adds Route 53 DNS records (A and AAAA) pointing to this CloudFront distribution
+     * 
+     * @param hostedZone - The Route53 hosted zone
+     * @param recordNames - Single record name or array of record names to create
+     * 
+     * @example
+     * ```typescript
+     * const cdn = new CloudFront(this, 'CDN', { ... });
+     * 
+     * // Single record
+     * cdn.addRoute53Records(hostedZone, 'www.example.com');
+     * 
+     * // Multiple records
+     * cdn.addRoute53Records(hostedZone, ['example.com', 'www.example.com', 'api.example.com']);
+     * ```
+     */
+    addRoute53Records(hostedZone: IHostedZone, recordNames: string | ReadonlyArray<string>): void {
+        const names = Array.isArray(recordNames) ? recordNames : [recordNames];
+        
+        names.forEach((recordName) => {
+            // Sanitize record name for use in construct ID
+            const sanitizedName = recordName.replace(/[^a-zA-Z0-9]/g, '');
+            
+            new ARecord(this, `ARecord${sanitizedName}`, {
+                zone: hostedZone,
+                recordName,
+                target: RecordTarget.fromAlias(new CloudFrontTarget(this.#distribution)),
+            });
+            
+            new AaaaRecord(this, `AaaaRecord${sanitizedName}`, {
+                zone: hostedZone,
+                recordName,
+                target: RecordTarget.fromAlias(new CloudFrontTarget(this.#distribution)),
+            });
+        });
+    }
+
+    /**
      * Creates an HTTP origin from a domain name
      * 
      * @param domainName - The domain name (with or without https://)
      * @returns HttpOrigin instance
      */
-    static HttpOrigin(domainName: string): HttpOrigin {
+    static httpOrigin(domainName: string): HttpOrigin {
         return new HttpOrigin(domainName.replace(/https:\/\//, ''));
     }
 
@@ -708,7 +799,7 @@ export class CloudFront extends Construct {
      * @param props - Optional configuration
      * @returns S3 origin with OAC
      */
-    static S3BucketOrigin(originId: string, bucket: IBucket, props: S3BucketOriginOptions = {}): IOrigin {
+    static s3BucketOrigin(originId: string, bucket: IBucket, props: S3BucketOriginOptions = {}): IOrigin {
         return S3Origin.withOriginAccessControl(bucket, {
             originId,
             originAccessLevels: props.enableNotFoundErrors === true ? [AccessLevel.READ, AccessLevel.LIST] : [AccessLevel.READ],
