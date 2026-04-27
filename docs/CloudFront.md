@@ -84,6 +84,116 @@ CloudFront access logs include:
 4. **Secure the log bucket** - Restrict access to authorized personnel only
 5. **Consider costs** - Logging generates storage costs based on traffic volume
 
+## Security Headers
+
+CloudFront automatically applies security best practices through response header policies. By default, the construct includes strict security headers to protect against common web vulnerabilities.
+
+### Default Security Headers
+
+The construct applies these security headers by default:
+
+- **Content Security Policy (CSP)** - Prevents XSS and data injection attacks
+- **X-Frame-Options** - Prevents clickjacking
+- **Referrer-Policy** - Controls referrer information
+- **Strict-Transport-Security (HSTS)** - Enforces HTTPS
+- **Cross-Origin-Opener-Policy (COOP)** - Isolates browsing context (`same-origin`)
+- **Cross-Origin-Embedder-Policy (COEP)** - Prevents loading cross-origin resources (`require-corp`)
+
+### Customizing Security Headers
+
+Use `CloudFront.responseHeaderPolicy()` to customize security headers:
+
+```typescript
+import { CloudFront } from '@designofadecade/cdk-constructs';
+
+const customPolicy = CloudFront.responseHeaderPolicy(this, 'CustomPolicy', {
+  name: 'my-security-policy',
+  // Customize CSP
+  csp: {
+    styleSrc: ["'self'", 'https://fonts.googleapis.com'],
+    frameSrc: ["'self'", 'https://www.youtube.com'],
+    frameAncestors: ["'self'"],
+  },
+  // Customize Cross-Origin headers
+  crossOriginOpenerPolicy: 'same-origin-allow-popups',
+  crossOriginEmbedderPolicy: 'credentialless',
+});
+
+const distribution = new CloudFront(this, 'Distribution', {
+  defaultBehavior: {
+    origin: CloudFront.s3BucketOrigin('origin', bucket),
+    responseHeadersPolicy: customPolicy,
+  },
+  stack: { id: 'my-app', tags: [] },
+});
+```
+
+### Disabling Cross-Origin Headers
+
+If you need to disable Cross-Origin isolation headers (e.g., for compatibility with third-party embeds):
+
+```typescript
+const relaxedPolicy = CloudFront.responseHeaderPolicy(this, 'RelaxedPolicy', {
+  name: 'relaxed-policy',
+  crossOriginOpenerPolicy: false,       // Disables COOP header
+  crossOriginEmbedderPolicy: false,     // Disables COEP header
+});
+```
+
+### Cross-Origin Header Values
+
+**Cross-Origin-Opener-Policy (COOP):**
+- `'same-origin'` (default) - Strict isolation
+- `'same-origin-allow-popups'` - Allows popups
+- `'unsafe-none'` - No isolation
+- `false` - Disable header
+
+**Cross-Origin-Embedder-Policy (COEP):**
+- `'require-corp'` (default) - Requires CORS or CORP
+- `'credentialless'` - Loads resources without credentials
+- `false` - Disable header
+
+### Custom CSP Configuration
+
+Customize Content Security Policy for your application needs:
+
+```typescript
+const policy = CloudFront.responseHeaderPolicy(this, 'AppPolicy', {
+  csp: {
+    styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+    frameSrc: ["'self'", 'https://www.youtube.com', 'https://player.vimeo.com'],
+    frameAncestors: ["'self'", 'https://trusted-embedder.com'],
+  },
+});
+```
+
+### Full CSP String Override
+
+For complete control, provide a custom CSP string:
+
+```typescript
+const policy = CloudFront.responseHeaderPolicy(this, 'CustomCSP', {
+  contentSecurityPolicy: `
+    default-src 'self';
+    script-src 'self' 'unsafe-inline' https://cdn.example.com;
+    style-src 'self' 'unsafe-inline';
+    img-src 'self' data: https:;
+    font-src 'self' https://fonts.gstatic.com;
+    connect-src 'self' https://api.example.com;
+  `.replace(/\s+/g, ' ').trim(),
+});
+```
+
+### Response Header Policy Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `name` | `string` | - | Policy name |
+| `csp` | `CspConfig` | - | Content Security Policy configuration |
+| `contentSecurityPolicy` | `string` | - | Full CSP string override |
+| `crossOriginOpenerPolicy` | `string \| false` | `'same-origin'` | COOP header value or `false` to disable |
+| `crossOriginEmbedderPolicy` | `string \| false` | `'require-corp'` | COEP header value or `false` to disable |
+
 ## Custom CloudFront Functions
 
 CloudFront Functions are lightweight JavaScript functions that run on CloudFront edge locations. They're ideal for simple request/response transformations with low latency.

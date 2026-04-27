@@ -181,6 +181,18 @@ export interface ResponseHeaderPolicyOptions {
      * Optional CSP configuration
      */
     readonly csp?: CspConfig;
+
+    /**
+     * Cross-Origin-Opener-Policy header value
+     * @default 'same-origin'
+     */
+    readonly crossOriginOpenerPolicy?: string | false;
+
+    /**
+     * Cross-Origin-Embedder-Policy header value
+     * @default 'require-corp'
+     */
+    readonly crossOriginEmbedderPolicy?: string | false;
 }
 
 /**
@@ -788,15 +800,25 @@ export class CloudFront extends Construct {
             .replaceAll(' none', " 'none'")
             .replaceAll(' unsafe-inline', " 'unsafe-inline'");
 
+        // Build custom headers array based on configuration
+        const customHeaders: Array<{ header: string; value: string; override: boolean }> = [];
+
+        const crossOriginOpenerPolicy = props.crossOriginOpenerPolicy ?? 'same-origin';
+        if (crossOriginOpenerPolicy !== false) {
+            customHeaders.push({ header: 'Cross-Origin-Opener-Policy', value: crossOriginOpenerPolicy, override: true });
+        }
+
+        const crossOriginEmbedderPolicy = props.crossOriginEmbedderPolicy ?? 'require-corp';
+        if (crossOriginEmbedderPolicy !== false) {
+            customHeaders.push({ header: 'Cross-Origin-Embedder-Policy', value: crossOriginEmbedderPolicy, override: true });
+        }
+
         return new ResponseHeadersPolicy(scope, name, {
             responseHeadersPolicyName: props.name ?? name,
             removeHeaders: ['Server', 'x-powered-by'],
-            customHeadersBehavior: {
-                customHeaders: [
-                    { header: 'Cross-Origin-Opener-Policy', value: 'same-origin', override: true },
-                    { header: 'Cross-Origin-Embedder-Policy', value: 'require-corp', override: true },
-                ],
-            },
+            customHeadersBehavior: customHeaders.length > 0 ? {
+                customHeaders,
+            } : undefined,
             securityHeadersBehavior: {
                 contentSecurityPolicy: {
                     contentSecurityPolicy,
