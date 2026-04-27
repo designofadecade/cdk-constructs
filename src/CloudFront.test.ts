@@ -303,15 +303,15 @@ describe('CloudFront', () => {
         cloudfront.addRoute53Records(hostedZone, 'www.example.com');
 
         const template = Template.fromStack(stack);
-        
+
         // Should create both A and AAAA records
         template.resourceCountIs('AWS::Route53::RecordSet', 2);
-        
+
         template.hasResourceProperties('AWS::Route53::RecordSet', {
             Type: 'A',
             Name: 'www.example.com.',
         });
-        
+
         template.hasResourceProperties('AWS::Route53::RecordSet', {
             Type: 'AAAA',
             Name: 'www.example.com.',
@@ -336,25 +336,25 @@ describe('CloudFront', () => {
         cloudfront.addRoute53Records(hostedZone, ['example.com', 'www.example.com']);
 
         const template = Template.fromStack(stack);
-        
+
         // Should create 2 A records and 2 AAAA records (4 total)
         template.resourceCountIs('AWS::Route53::RecordSet', 4);
-        
+
         template.hasResourceProperties('AWS::Route53::RecordSet', {
             Type: 'A',
             Name: 'example.com.',
         });
-        
+
         template.hasResourceProperties('AWS::Route53::RecordSet', {
             Type: 'AAAA',
             Name: 'example.com.',
         });
-        
+
         template.hasResourceProperties('AWS::Route53::RecordSet', {
             Type: 'A',
             Name: 'www.example.com.',
         });
-        
+
         template.hasResourceProperties('AWS::Route53::RecordSet', {
             Type: 'AAAA',
             Name: 'www.example.com.',
@@ -386,15 +386,15 @@ describe('CloudFront', () => {
         });
 
         const template = Template.fromStack(stack);
-        
+
         // Should automatically create both A and AAAA records
         template.resourceCountIs('AWS::Route53::RecordSet', 2);
-        
+
         template.hasResourceProperties('AWS::Route53::RecordSet', {
             Type: 'A',
             Name: 'example.com.',
         });
-        
+
         template.hasResourceProperties('AWS::Route53::RecordSet', {
             Type: 'AAAA',
             Name: 'example.com.',

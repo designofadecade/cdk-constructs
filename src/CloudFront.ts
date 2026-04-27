@@ -762,17 +762,17 @@ export class CloudFront extends Construct {
      */
     addRoute53Records(hostedZone: IHostedZone, recordNames: string | ReadonlyArray<string>): void {
         const names = Array.isArray(recordNames) ? recordNames : [recordNames];
-        
+
         names.forEach((recordName) => {
             // Sanitize record name for use in construct ID
             const sanitizedName = recordName.replace(/[^a-zA-Z0-9]/g, '');
-            
+
             new ARecord(this, `ARecord${sanitizedName}`, {
                 zone: hostedZone,
                 recordName,
                 target: RecordTarget.fromAlias(new CloudFrontTarget(this.#distribution)),
             });
-            
+
             new AaaaRecord(this, `AaaaRecord${sanitizedName}`, {
                 zone: hostedZone,
                 recordName,

@@ -198,6 +198,8 @@ CloudFront Functions have some constraints:
 
 For complex logic or external API calls, consider using Lambda@Edge instead.
 
+> 📖 **For comprehensive examples and best practices**, see the [CloudFront Custom Functions](./CloudFrontCustomFunctions.md) guide.
+
 ## Route 53 DNS Records
 
 Easily add Route 53 DNS records that point to your CloudFront distribution. The construct automatically creates both A and AAAA records for IPv4 and IPv6 support.
@@ -328,3 +330,4 @@ This ensures your distribution is accessible via both IPv4 and IPv6.
 ## Related Constructs
 
 - [S3Bucket](./S3Bucket.md) - S3 bucket for origin content
+- [CloudFront Custom Functions](./CloudFrontCustomFunctions.md) - Detailed guide for creating custom edge functions

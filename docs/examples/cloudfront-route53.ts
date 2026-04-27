@@ -43,7 +43,7 @@ export class CloudFrontRoute53Stack extends Stack {
             defaultBehavior: {
                 origin: CloudFront.s3BucketOrigin('main', websiteBucket.bucket),
             },
-            stack: { 
+            stack: {
                 id: 'my-app',
                 tags: [{ key: 'Environment', value: 'Production' }],
             },
@@ -102,7 +102,7 @@ export class MultiLanguageSiteStack extends Stack {
             defaultBehavior: {
                 origin: CloudFront.s3BucketOrigin('main', contentBucket.bucket),
             },
-            stack: { 
+            stack: {
                 id: 'multilang-site',
                 tags: [],
             },
