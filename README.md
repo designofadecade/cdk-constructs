@@ -63,6 +63,7 @@ Comprehensive documentation for all constructs is available in the [`docs/`](./d
 - **[S3Bucket](./docs/S3Bucket.md)** - S3 buckets with security practices
 - **[DynamoTable](./docs/DynamoTable.md)** - DynamoDB tables
 - **[Cognito](./docs/Cognito.md)** - User authentication
+- **[GitHubAccess](./docs/GitHubAccess.md)** - GitHub Actions OIDC roles for CI/CD deployments
 - **[HttpApi](./docs/HttpApi.md)** - API Gateway HTTP APIs
 - **[Sqs](./docs/Sqs.md)** - SQS queues
 - **[EventBridge](./docs/EventBridge.md)** - Scheduled Lambda triggers
@@ -108,6 +109,7 @@ Each document includes:
 ### Authentication & Authorization
 
 - **[Cognito](#cognito)** - User pools with OAuth, MFA, and custom domains
+- **[GitHubAccess](#githubaccess)** - GitHub Actions OIDC roles for secure CI/CD deployments
 
 ### Messaging & Events
 
@@ -281,6 +283,46 @@ const cognito = new Cognito(this, 'MyUserPool', {
 - Email/SMS verification
 - Lambda triggers (pre-authentication, custom message, etc.)
 - User pool clients with branding
+
+### GitHubAccess
+
+Creates IAM roles with OIDC federation for secure GitHub Actions deployments.
+
+```typescript
+const githubRole = new GitHubAccess(this, 'GitHubActionsRole', {
+  name: 'github-actions-role',
+  description: 'GitHub Actions deployment role for production',
+  stack: {
+    id: 'my-app',
+    tags: [{ key: 'Environment', value: 'production' }],
+  },
+  githubOidc: {
+    providerArn: 'arn:aws:iam::123456789012:oidc-provider/token.actions.githubusercontent.com',
+    repository: 'my-org/my-repo',
+    allowedBranch: 'main',
+    environmentName: 'production',
+  },
+  s3Access: [{
+    bucket: myBucket,
+    prefixes: ['dashboard/*', 'public/*'],
+  }],
+  cloudFrontAccess: [{
+    distribution: myDistribution,
+  }],
+  lambdaAccess: [{
+    functionPrefix: 'my-app-*',
+    region: this.region,
+    accountId: this.account,
+  }],
+});
+```
+
+**Key Features:**
+- GitHub OIDC provider integration (no long-lived credentials)
+- Granular S3, CloudFront, and Lambda permissions
+- Branch and environment restrictions
+- Support for tag-based deployments
+- CloudFormation output with role ARN
 
 ### DynamoTable
 

@@ -1,6 +1,8 @@
-# Access
+# GitHubAccess
 
-A CDK construct that creates IAM roles with OIDC federation for GitHub Actions and other CI/CD workflows. The `Access` construct simplifies setting up secure, least-privilege IAM roles for automated deployments.
+A CDK construct that creates IAM roles with OIDC federation for GitHub Actions and other CI/CD workflows. The `GitHubAccess` construct simplifies setting up secure, least-privilege IAM roles for automated deployments.
+
+> **Note:** This construct was previously named `Access` and is still exported under that alias for backwards compatibility.
 
 ## Features
 
@@ -17,9 +19,9 @@ A CDK construct that creates IAM roles with OIDC federation for GitHub Actions a
 ### GitHub Actions Deployment Role
 
 ```typescript
-import { Access } from '@designofadecade/cdk-constructs';
+import { GitHubAccess } from '@designofadecade/cdk-constructs';
 
-const githubRole = new Access(this, 'GitHubActionsRole', {
+const githubRole = new GitHubAccess(this, 'GitHubActionsRole', {
   name: 'github-actions-role',
   description: 'GitHub Actions deployment role for production',
   stack: {
@@ -43,7 +45,7 @@ const githubRole = new Access(this, 'GitHubActionsRole', {
 ### Full Deployment Role with S3, CloudFront, and Lambda
 
 ```typescript
-const deploymentRole = new Access(this, 'DeploymentRole', {
+const deploymentRole = new GitHubAccess(this, 'DeploymentRole', {
   name: 'github-deployment-role',
   description: 'GitHub Actions deployment role',
   stack: {
@@ -85,7 +87,7 @@ const deploymentRole = new Access(this, 'DeploymentRole', {
 ### Staging Environment with Different Branch
 
 ```typescript
-const stagingRole = new Access(this, 'StagingDeploymentRole', {
+const stagingRole = new GitHubAccess(this, 'StagingDeploymentRole', {
   name: 'github-staging-role',
   stack: {
     id: 'my-app-staging',
@@ -110,7 +112,7 @@ const stagingRole = new Access(this, 'StagingDeploymentRole', {
 ### Lambda-Only Deployment Role
 
 ```typescript
-const lambdaDeployRole = new Access(this, 'LambdaDeployRole', {
+const lambdaDeployRole = new GitHubAccess(this, 'LambdaDeployRole', {
   name: 'lambda-deploy-role',
   stack: {
     id: 'my-app',
@@ -139,7 +141,7 @@ const lambdaDeployRole = new Access(this, 'LambdaDeployRole', {
 ### Adding Custom Permissions
 
 ```typescript
-const role = new Access(this, 'CustomRole', {
+const role = new GitHubAccess(this, 'CustomRole', {
   name: 'custom-role',
   stack: { id: 'my-app', tags: [] },
   githubOidc: {
@@ -150,7 +152,7 @@ const role = new Access(this, 'CustomRole', {
 });
 
 // Add custom DynamoDB permissions
-role.addToPolicy(new PolicyStatement({
+role.role.addToPolicy(new PolicyStatement({
   effect: Effect.ALLOW,
   actions: [
     'dynamodb:PutItem',
@@ -163,7 +165,7 @@ role.addToPolicy(new PolicyStatement({
 }));
 
 // Add CloudWatch Logs permissions
-role.addToPolicy(new PolicyStatement({
+role.role.addToPolicy(new PolicyStatement({
   effect: Effect.ALLOW,
   actions: [
     'logs:CreateLogStream',
@@ -177,7 +179,7 @@ role.addToPolicy(new PolicyStatement({
 
 ## GitHub Actions Workflow
 
-After deploying the Access construct, use the role in your GitHub Actions workflow:
+After deploying the `GitHubAccess` construct, use the role in your GitHub Actions workflow:
 
 ```yaml
 name: Deploy

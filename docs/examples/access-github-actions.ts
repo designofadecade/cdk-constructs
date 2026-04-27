@@ -1,10 +1,10 @@
 import { Stack, StackProps } from 'aws-cdk-lib';
 import { Construct } from 'constructs';
-import { Access, S3Bucket, CloudFront } from '@designofadecade/cdk-constructs';
+import { GitHubAccess, S3Bucket, CloudFront } from '@designofadecade/cdk-constructs';
 
 /**
  * Example showing how to create a GitHub Actions deployment role
- * using the Access construct
+ * using the GitHubAccess construct
  */
 export class MyAppStack extends Stack {
     constructor(scope: Construct, id: string, props?: StackProps) {
@@ -52,8 +52,8 @@ export class MyAppStack extends Stack {
         const environment = 'production'; // or 'staging'
         const allowedBranch = environment === 'production' ? 'main' : 'staging';
 
-        // Create GitHub Actions deployment role using Access construct
-        const githubActionsRole = new Access(this, 'GitHubActionsRole', {
+        // Create GitHub Actions deployment role using GitHubAccess construct
+        const githubActionsRole = new GitHubAccess(this, 'GitHubActionsRole', {
             name: 'github-actions-role',
             description: `GitHub Actions deployment role for ${environment} environment`,
             stack: {

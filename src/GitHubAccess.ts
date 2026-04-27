@@ -135,7 +135,7 @@ export interface LambdaAccessConfig {
 /**
  * Properties for configuring an Access role
  */
-export interface AccessProps {
+export interface GitHubAccessProps {
     /**
      * The name of the IAM role
      */
@@ -239,13 +239,13 @@ export interface AccessProps {
  * });
  * ```
  */
-export class Access extends Construct {
+export class GitHubAccess extends Construct {
     /**
      * The IAM role
      */
     public readonly role: Role;
 
-    constructor(scope: Construct, id: string, private readonly props: AccessProps) {
+    constructor(scope: Construct, id: string, private readonly props: GitHubAccessProps) {
         super(scope, id);
 
         // Create the role with GitHub OIDC federation

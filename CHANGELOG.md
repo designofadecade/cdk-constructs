@@ -5,9 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.34.0] - 2026-04-27
+## [1.35.0] - 2026-04-27
 
 ### Changed
+- **GitHubAccess: Renamed construct**
+  - Renamed `Access` class to `GitHubAccess` for better clarity
+  - Renamed `AccessProps` interface to `GitHubAccessProps`
+  - Removed old `Access.ts` source file (replaced by `GitHubAccess.ts`)
+  - Old names remain available as aliases for backwards compatibility
+  - Files renamed: `Access.ts` → `GitHubAccess.ts`, `Access.test.ts` → `GitHubAccess.test.ts`, `docs/Access.md` → `docs/GitHubAccess.md`
+  - Updated all documentation and examples to use new name
+
 - **GuardDutyMalwareProtection: IAM permissions**
   - Split EventBridge permissions into 3 separate policies for clarity and compliance
   - `events:DescribeRule` and `events:ListTargetsByRule` no longer have ManagedBy condition

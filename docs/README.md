@@ -30,6 +30,7 @@ Comprehensive documentation for all CDK constructs in this library.
 ### Security & Identity
 - **[Cognito](./Cognito.md)** - User authentication and authorization
 - **[Secrets](./Secrets.md)** - Secrets Manager integration
+- **[GitHubAccess](./GitHubAccess.md)** - GitHub Actions OIDC roles for CI/CD deployments
 
 ## Quick Start Examples
 

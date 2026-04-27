@@ -1,13 +1,13 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { App, Stack } from 'aws-cdk-lib';
 import { Template, Match } from 'aws-cdk-lib/assertions';
-import { Access } from './Access.js';
+import { GitHubAccess } from './GitHubAccess.js';
 import { Bucket } from 'aws-cdk-lib/aws-s3';
 import { Distribution, ViewerProtocolPolicy } from 'aws-cdk-lib/aws-cloudfront';
 import { S3Origin } from 'aws-cdk-lib/aws-cloudfront-origins';
 import { PolicyStatement, Effect } from 'aws-cdk-lib/aws-iam';
 
-describe('Access', () => {
+describe('GitHubAccess', () => {
     let app: App;
     let stack: Stack;
 
@@ -22,7 +22,7 @@ describe('Access', () => {
     });
 
     it('should create a GitHub Actions role with OIDC federation', () => {
-        new Access(stack, 'GitHubRole', {
+        new GitHubAccess(stack, 'GitHubRole', {
             name: 'github-actions-role',
             description: 'GitHub Actions deployment role',
             stack: {
@@ -88,7 +88,7 @@ describe('Access', () => {
     });
 
     it('should support GitHub OIDC with only branch access', () => {
-        new Access(stack, 'GitHubRole', {
+        new GitHubAccess(stack, 'GitHubRole', {
             name: 'github-role',
             stack: {
                 id: 'test-app',
@@ -126,7 +126,7 @@ describe('Access', () => {
             bucketName: 'test-bucket',
         });
 
-        new Access(stack, 'GitHubRole', {
+        new GitHubAccess(stack, 'GitHubRole', {
             name: 'github-role',
             stack: {
                 id: 'test-app',
@@ -184,7 +184,7 @@ describe('Access', () => {
             },
         });
 
-        new Access(stack, 'GitHubRole', {
+        new GitHubAccess(stack, 'GitHubRole', {
             name: 'github-role',
             stack: {
                 id: 'test-app',
@@ -228,7 +228,7 @@ describe('Access', () => {
     });
 
     it('should add Lambda function permissions', () => {
-        new Access(stack, 'GitHubRole', {
+        new GitHubAccess(stack, 'GitHubRole', {
             name: 'github-role',
             stack: {
                 id: 'test-app',
@@ -271,7 +271,7 @@ describe('Access', () => {
     it('should support custom S3 actions', () => {
         const bucket = new Bucket(stack, 'Bucket');
 
-        new Access(stack, 'GitHubRole', {
+        new GitHubAccess(stack, 'GitHubRole', {
             name: 'github-role',
             stack: {
                 id: 'test-app',
@@ -309,7 +309,7 @@ describe('Access', () => {
     });
 
     it('should disable output when createOutput is false', () => {
-        new Access(stack, 'GitHubRole', {
+        new GitHubAccess(stack, 'GitHubRole', {
             name: 'github-role',
             stack: {
                 id: 'test-app',
@@ -330,7 +330,7 @@ describe('Access', () => {
     });
 
     it('should support custom output names', () => {
-        new Access(stack, 'GitHubRole', {
+        new GitHubAccess(stack, 'GitHubRole', {
             name: 'github-role',
             stack: {
                 id: 'test-app',
@@ -355,7 +355,7 @@ describe('Access', () => {
     });
 
     it('should allow adding custom policy statements', () => {
-        const access = new Access(stack, 'GitHubRole', {
+        const access = new GitHubAccess(stack, 'GitHubRole', {
             name: 'github-role',
             stack: {
                 id: 'test-app',
@@ -391,7 +391,7 @@ describe('Access', () => {
     });
 
     it('should expose role properties', () => {
-        const access = new Access(stack, 'GitHubRole', {
+        const access = new GitHubAccess(stack, 'GitHubRole', {
             name: 'github-role',
             stack: {
                 id: 'test-app',
@@ -413,7 +413,7 @@ describe('Access', () => {
         const bucket1 = new Bucket(stack, 'Bucket1');
         const bucket2 = new Bucket(stack, 'Bucket2');
 
-        new Access(stack, 'GitHubRole', {
+        new GitHubAccess(stack, 'GitHubRole', {
             name: 'github-role',
             stack: {
                 id: 'test-app',
@@ -450,7 +450,7 @@ describe('Access', () => {
 
     it('should throw error when no authentication method is provided', () => {
         expect(() => {
-            new Access(stack, 'GitHubRole', {
+            new GitHubAccess(stack, 'GitHubRole', {
                 name: 'github-role',
                 stack: {
                     id: 'test-app',
