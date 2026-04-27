@@ -441,7 +441,7 @@ describe('Access', () => {
         // Should have 2 policy statements for S3
         const policy = template.findResources('AWS::IAM::Policy');
         const policyDoc = Object.values(policy)[0]?.Properties?.PolicyDocument;
-        const s3Statements = policyDoc?.Statement?.filter((s: any) => 
+        const s3Statements = policyDoc?.Statement?.filter((s: any) =>
             s.Action?.some((a: string) => a.startsWith('s3:'))
         );
 

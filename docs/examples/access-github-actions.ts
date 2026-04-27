@@ -44,10 +44,10 @@ export class MyAppStack extends Stack {
 
         // GitHub OIDC Provider ARN (create this once per AWS account)
         const githubOidcProviderArn = 'arn:aws:iam::123456789012:oidc-provider/token.actions.githubusercontent.com';
-        
+
         // GitHub repository
         const githubRepository = 'my-org/my-repo';
-        
+
         // Environment configuration
         const environment = 'production'; // or 'staging'
         const allowedBranch = environment === 'production' ? 'main' : 'staging';
