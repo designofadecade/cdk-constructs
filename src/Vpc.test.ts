@@ -376,4 +376,150 @@ describe('Vpc', () => {
         // (these are the final associations that take effect)
         template.resourceCountIs('AWS::EC2::SubnetNetworkAclAssociation', 10);
     });
+
+    describe('mapPublicIpOnLaunch', () => {
+        it('defaults to true for backward compatibility', () => {
+            const app = new App();
+            const stack = new Stack(app, 'TestStack');
+
+            new Vpc(stack, 'TestVpc', {
+                name: 'test-vpc',
+                maxAzs: 2,
+                stack: { id: 'test', tags: [] },
+            });
+
+            const template = Template.fromStack(stack);
+
+            // Find all public subnets
+            const subnets = template.findResources('AWS::EC2::Subnet');
+            const publicSubnets = Object.entries(subnets).filter(([_, subnet]: [string, any]) =>
+                subnet.Properties.Tags?.some((tag: any) =>
+                    tag.Key === 'aws-cdk:subnet-name' && tag.Value.includes('public')
+                )
+            );
+
+            // Verify MapPublicIpOnLaunch defaults to true on public subnets
+            publicSubnets.forEach(([_, subnet]: [string, any]) => {
+                expect(subnet.Properties.MapPublicIpOnLaunch).toBe(true);
+            });
+        });
+
+        it('allows public IP assignment when explicitly set to true', () => {
+            const app = new App();
+            const stack = new Stack(app, 'TestStack');
+
+            new Vpc(stack, 'TestVpc', {
+                name: 'test-vpc',
+                maxAzs: 2,
+                mapPublicIpOnLaunch: true,
+                stack: { id: 'test', tags: [] },
+            });
+
+            const template = Template.fromStack(stack);
+
+            // Find all public subnets
+            const subnets = template.findResources('AWS::EC2::Subnet');
+            const publicSubnets = Object.entries(subnets).filter(([_, subnet]: [string, any]) =>
+                subnet.Properties.Tags?.some((tag: any) =>
+                    tag.Key === 'aws-cdk:subnet-name' && tag.Value.includes('public')
+                )
+            );
+
+            // Verify MapPublicIpOnLaunch is true
+            publicSubnets.forEach(([_, subnet]: [string, any]) => {
+                expect(subnet.Properties.MapPublicIpOnLaunch).toBe(true);
+            });
+        });
+
+        it('disables automatic public IP assignment when set to false', () => {
+            const app = new App();
+            const stack = new Stack(app, 'TestStack');
+
+            new Vpc(stack, 'TestVpc', {
+                name: 'test-vpc',
+                maxAzs: 2,
+                mapPublicIpOnLaunch: false,
+                stack: { id: 'test', tags: [] },
+            });
+
+            const template = Template.fromStack(stack);
+
+            // Find all public subnets
+            const subnets = template.findResources('AWS::EC2::Subnet');
+            const publicSubnets = Object.entries(subnets).filter(([_, subnet]: [string, any]) =>
+                subnet.Properties.Tags?.some((tag: any) =>
+                    tag.Key === 'aws-cdk:subnet-name' && tag.Value.includes('public')
+                )
+            );
+
+            // Verify MapPublicIpOnLaunch is false on public subnets
+            publicSubnets.forEach(([_, subnet]: [string, any]) => {
+                expect(subnet.Properties.MapPublicIpOnLaunch).toBe(false);
+            });
+
+            // Verify we have the expected number of public subnets (2 AZs)
+            expect(publicSubnets.length).toBe(2);
+        });
+
+        it('only affects public subnets, not private subnets', () => {
+            const app = new App();
+            const stack = new Stack(app, 'TestStack');
+
+            new Vpc(stack, 'TestVpc', {
+                name: 'test-vpc',
+                maxAzs: 2,
+                mapPublicIpOnLaunch: false,
+                stack: { id: 'test', tags: [] },
+            });
+
+            const template = Template.fromStack(stack);
+
+            // Find all subnets
+            const subnets = template.findResources('AWS::EC2::Subnet');
+            const privateSubnets = Object.entries(subnets).filter(([_, subnet]: [string, any]) =>
+                subnet.Properties.Tags?.some((tag: any) =>
+                    tag.Key === 'aws-cdk:subnet-name' &&
+                    (tag.Value.includes('private') || tag.Value.includes('isolated'))
+                )
+            );
+
+            // Private subnets should never have MapPublicIpOnLaunch set to true
+            // (AWS defaults private subnets to false, so CDK typically doesn't set it)
+            privateSubnets.forEach(([_, subnet]: [string, any]) => {
+                if (subnet.Properties.MapPublicIpOnLaunch !== undefined) {
+                    expect(subnet.Properties.MapPublicIpOnLaunch).toBe(false);
+                }
+            });
+        });
+
+        it('combines with other security features like restrictDefaultNacl', () => {
+            const app = new App();
+            const stack = new Stack(app, 'TestStack');
+
+            new Vpc(stack, 'TestVpc', {
+                name: 'test-vpc',
+                maxAzs: 2,
+                mapPublicIpOnLaunch: false, // Disable public IPs
+                restrictDefaultNacl: true,  // Restrict NACL
+                stack: { id: 'test', tags: [] },
+            });
+
+            const template = Template.fromStack(stack);
+
+            // Verify MapPublicIpOnLaunch is false
+            const subnets = template.findResources('AWS::EC2::Subnet');
+            const publicSubnets = Object.entries(subnets).filter(([_, subnet]: [string, any]) =>
+                subnet.Properties.Tags?.some((tag: any) =>
+                    tag.Key === 'aws-cdk:subnet-name' && tag.Value.includes('public')
+                )
+            );
+
+            publicSubnets.forEach(([_, subnet]: [string, any]) => {
+                expect(subnet.Properties.MapPublicIpOnLaunch).toBe(false);
+            });
+
+            // Verify NACLs are also created (from restrictDefaultNacl)
+            template.resourceCountIs('AWS::EC2::NetworkAcl', 3);
+        });
+    });
 });

@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.37.0] - 2026-04-278
+### Added
+- **Vpc: Public IP assignment control**
+  - New `mapPublicIpOnLaunch` property in `VpcProps` to control automatic public IP assignment on public subnets
+  - Defaults to `true` for backward compatibility
+  - Set to `false` to disable automatic public IPs, reducing attack surface and enforcing network isolation
+  - Recommended for architectures where all traffic goes through API Gateway, ALB, or CloudFront
+  - Works in combination with other security features like `restrictDefaultNacl` and Network ACLs
+  - Only affects public subnets; private subnets never assign public IPs
+  - Perfect for defense-in-depth security strategies
+
 ## [1.36.0] - 2026-04-27
 
 ### Added

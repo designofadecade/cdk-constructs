@@ -137,6 +137,26 @@ export interface VpcProps {
      * defaultNaclAllowedPorts: [22] // Allow SSH from internet (for bastion)
      */
     readonly defaultNaclAllowedPorts?: ReadonlyArray<number>;
+
+    /**
+     * Control whether public subnets automatically assign public IPs to instances (default: true)
+     * 
+     * When set to false, instances/Lambda functions in public subnets will not 
+     * receive public IPs automatically, enhancing security by reducing attack surface.
+     * 
+     * **Security**: Setting to `false` is recommended for architectures where:
+     * - All traffic goes through API Gateway, ALB, or CloudFront
+     * - No direct internet access to compute resources is needed
+     * - Defense-in-depth security posture is required
+     * 
+     * **Note**: This only affects public subnets. Private subnets never assign public IPs.
+     * 
+     * @default true - Maintains AWS default behavior for backward compatibility
+     * 
+     * @example
+     * mapPublicIpOnLaunch: false // Disable automatic public IP assignment for enhanced security
+     */
+    readonly mapPublicIpOnLaunch?: boolean;
 }
 
 /**
@@ -196,6 +216,7 @@ export class Vpc extends Construct {
                 {
                     name: `${vpcName}-public`,
                     subnetType: SubnetType.PUBLIC,
+                    mapPublicIpOnLaunch: props.mapPublicIpOnLaunch ?? true,
                 },
                 {
                     name: `${vpcName}-private-egress`,

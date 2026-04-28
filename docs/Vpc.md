@@ -14,6 +14,50 @@ CDK construct for creating AWS VPCs with public and private subnets.
 
 ## Security
 
+### Public IP Assignment Control
+
+**Security Enhancement**: Control whether public subnets automatically assign public IP addresses to instances and Lambda functions.
+
+**Default Behavior** (backward compatible):
+```typescript
+const vpc = new Vpc(this, 'DefaultVpc', {
+  name: 'default-vpc',
+  // mapPublicIpOnLaunch: true (default)
+  stack: { id: 'my-app', tags: [] },
+});
+```
+
+**Enhanced Security** (disable automatic public IPs):
+```typescript
+const vpc = new Vpc(this, 'SecureVpc', {
+  name: 'secure-vpc',
+  mapPublicIpOnLaunch: false, // ✅ Disable automatic public IPs
+  restrictDefaultNacl: true,   // ✅ Add NACL protection
+  stack: { id: 'my-app', tags: [] },
+});
+```
+
+**Why disable public IP assignment?**
+- ✅ **Reduces attack surface** - No direct internet access to compute resources
+- ✅ **Defense-in-depth** - Multiple layers of security
+- ✅ **Best for API Gateway + Lambda** - All traffic through managed endpoints
+- ✅ **Best for CloudFront + ALB** - All traffic through CDN/load balancer
+- ✅ **Enforces architecture** - Prevents accidental public exposure
+
+**When to set `mapPublicIpOnLaunch: false`:**
+- All traffic goes through API Gateway
+- Using CloudFront + Application Load Balancer architecture
+- No EC2 instances need direct internet access
+- Lambda functions don't need public IPs (they rarely do)
+- Security policy requires minimizing public IP exposure
+
+**When to keep default (`true`):**
+- Running bastion hosts or jump servers
+- EC2 instances that need direct internet access
+- Development environments where flexibility is needed
+
+**Note**: Private subnets never assign public IPs regardless of this setting.
+
 ### Network ACL Protection (Opt-In)
 
 **IMPORTANT**: Network ACL restrictions are **disabled by default** to maintain backward compatibility with existing deployments.
@@ -62,6 +106,7 @@ const vpc = new Vpc(this, 'MyVpc', {
 | `maxAzs` | `number` | 2 | Maximum availability zones |
 | `natGateways` | `number` | 0 | Number of NAT Gateways (0 = none, cost optimization) |
 | `endpoints` | `VpcEndpointType[]` | - | VPC endpoints: 'sqs', 'secrets-manager', 's3' |
+| `mapPublicIpOnLaunch` | `boolean` | **true** | Control automatic public IP assignment on public subnets (set `false` for enhanced security) |
 | `restrictPrivateSubnetNacls` | `boolean` | **false** | Enable restrictive NACLs (set `true` for new VPCs) |
 | `restrictPublicSubnetNacls` | `boolean` | **false** | Block internet access to public subnets (use when everything is behind API Gateway) |
 | `restrictDefaultNacl` | `boolean` | **false** | Replace the default NACL with custom secure NACLs for all subnets. Perfect for API Gateway + Lambda. Allows Lambda to call external APIs while blocking incoming internet access. |
@@ -80,12 +125,29 @@ const vpc = new Vpc(this, 'MyVpc', {
 
 1. **Use multiple AZs** for high availability (default: 2)
 2. **Enable Network ACL restrictions for NEW VPCs** (`restrictPrivateSubnetNacls: true`)
-3. **Use private subnets** for databases and application servers
-4. **Use public subnets** only for load balancers (if needed)
-5. **Prefer VPC endpoints** over NAT Gateways for AWS service access
-6. **Use isolated subnets** for databases that don't need internet access
-7. **Plan CIDR blocks** to avoid conflicts with other VPCs
-8. **Disable NAT Gateways** (natGateways: 0) if services are behind API Gateway
+3. **Disable automatic public IPs for enhanced security** (`mapPublicIpOnLaunch: false`)
+4. **Use private subnets** for databases and application servers
+5. **Use public subnets** only for load balancers (if needed)
+6. **Prefer VPC endpoints** over NAT Gateways for AWS service access
+7. **Use isolated subnets** for databases that don't need internet access
+8. **Plan CIDR blocks** to avoid conflicts with other VPCs
+9. **Disable NAT Gateways** (natGateways: 0) if services are behind API Gateway
+
+### Recommended Configuration for New VPCs
+
+For maximum security on new VPCs:
+
+```typescript
+const vpc = new Vpc(this, 'ProductionVpc', {
+  name: 'production-vpc',
+  maxAzs: 2,
+  natGateways: 0, // Use VPC endpoints instead
+  endpoints: ['s3', 'secrets-manager', 'sqs'],
+  mapPublicIpOnLaunch: false, // ✅ Disable automatic public IPs
+  restrictDefaultNacl: true,   // ✅ Lock down default NACL
+  stack: { id: 'my-app', tags: [] },
+});
+```
 
 ## Network ACL Configuration
 
@@ -375,6 +437,45 @@ This construct implements **defense-in-depth** with both Network ACLs and Securi
 - Fine-grained control per resource
 - Easier to manage for specific services
 - Stateful (automatic return traffic)
+
+### Example: API Gateway + Lambda Architecture (Maximum Security)
+
+Perfect for serverless applications where all traffic goes through API Gateway:
+
+```typescript
+const vpc = new Vpc(this, 'ApiGatewayVpc', {
+  name: 'api-gateway-vpc',
+  maxAzs: 2,
+  natGateways: 0, // No NAT needed - use VPC endpoints
+  endpoints: ['s3', 'secrets-manager', 'sqs'],
+  mapPublicIpOnLaunch: false, // ✅ No automatic public IPs
+  restrictDefaultNacl: true,   // ✅ Block incoming internet traffic
+  stack: { id: 'my-app', tags: [] },
+});
+
+// Lambda functions run in private subnets with VPC protection
+const api = new HttpApi(this, 'Api', {
+  functions: [{
+    path: '/api/users',
+    handler: userHandler,
+  }],
+  stack: { id: 'my-app', tags: [] },
+});
+```
+
+**Security layers:**
+1. **No public IPs**: Resources can't be directly accessed from internet
+2. **NACL**: Blocks all incoming internet traffic (allows Lambda to call external APIs)
+3. **API Gateway**: All public traffic managed outside VPC
+4. **VPC Endpoints**: AWS service access without internet
+5. **Security Groups**: Additional layer of access control
+
+**Architecture flow:**
+```
+Internet → API Gateway (managed) → Lambda (private subnet, no public IP) → External APIs ✅
+                                 ↓
+                           RDS Database (isolated subnet)
+```
 
 ### Example: Database Security
 
